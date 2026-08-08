@@ -62,6 +62,27 @@ export interface ProfileRow {
   line_user_id: string | null;
 }
 
+/** 提醒階段：開課前 3 天 / 前 1 天。對應 `notification_log.stage`。 */
+export type ReminderStage = "d3" | "d1";
+
+/** 通知管道。對應 `notification_log.channel`；LINE 推播接上後再加 `"line"`。 */
+export type NotificationChannel = "email";
+
+/**
+ * 通知寄送記錄。寄信前先 insert，撞到 unique violation 就是「已經寄過」。
+ *
+ * DB 端 stage / channel 是純 text（見 migration 註解：日後加階段不必改型別），
+ * 所以讀回來時維持 string，不硬轉成上面的窄型別。
+ */
+export interface NotificationLogRow {
+  id: string;
+  /** 可為 null：日後非場次類的通知（電子報等）也會記在這張表 */
+  session_id: string | null;
+  stage: string;
+  channel: string;
+  sent_at: string;
+}
+
 /** 一位報名者：把 order + profile + auth email 併起來的結果。 */
 export interface Attendee {
   /** 可為 null：電話／LINE 代訂沒有綁會員帳號 */

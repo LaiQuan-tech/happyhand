@@ -11,13 +11,15 @@
 | Job | 排程（Asia/Taipei） | 做什麼 | 會不會改資料 |
 |---|---|---|---|
 | `reclaim-seat-holds` | 每分鐘 `* * * * *` | 呼叫 `release_expired_seat_holds()`，清掉過期的名額暫扣並還原 `seats_taken` | ✅ 會（由 DB function 在單一交易內完成） |
-| `workshop-reminders` | 每天 09:00 `0 9 * * *` | 找出 3 天後與 1 天後開課的場次，對已付款報名者寄提醒信 | ❌ 不改 DB，只寄信 |
+| `workshop-reminders` | 每天 09:00 `0 9 * * *` | 找出 3 天後與 1 天後開課的場次，對已付款報名者寄提醒信 | ✅ 只寫 `notification_log`（去重記錄），不碰訂單與場次 |
 | `atm-reconciliation` | 每小時 `0 * * * *` | 列出超過 3 天仍未付款的 ATM 訂單，輸出人工對帳清單 | ❌ **完全唯讀，是 stub** |
-| `health` | 每 15 分鐘 `*/15 * * * *` | 輸出心跳 log，順便清理過期的去重記錄 | ❌ 不碰 DB |
+| `health` | 每 15 分鐘 `*/15 * * * *` | 輸出心跳 log | ❌ 不碰 DB |
 
 ### 1. `reclaim-seat-holds`
 
-實際邏輯在 Postgres function `release_expired_seat_holds()`（由 `supabase/migrations/` 提供，本 worker 不碰那些檔案）。
+實際邏輯在 Postgres function `release_expired_seat_holds()`（由 `supabase/migrations/` 的 init migration 提供，worker 只負責呼叫）。
+
+> worker 唯一擁有的 migration 是 `..._notification_log.sql`（提醒信去重用的表），其餘 schema 都不歸這裡管。
 
 放在 DB 端是刻意的：刪 `seat_holds` 與回補 `workshop_sessions.seats_taken` 必須在同一個交易裡，否則會出現「暫扣刪掉了但名額沒還回去」的狀態，直接造成少賣或超賣。worker 只負責定時觸發與記錄結果。
 
@@ -26,7 +28,11 @@ function 若回傳 integer，log 會出現 `{"msg":"seat_holds_released","releas
 ### 2. `workshop-reminders`
 
 - 兩個階段：開課前 3 天（`d3`）與前 1 天（`d1`）。
-- 「幾天後」以**台北當地日曆日**計算：09:00 跑的時候，`d3` 抓的是台北時間第 3 天整天（00:00–24:00）開始的場次。台灣自 1980 年起無日光節約時間，所以用固定 UTC+8 位移計算，不需要額外的時區套件。
+- 「幾天後」以**台北當地日曆日**計算。台灣自 1980 年起無日光節約時間，所以用固定 UTC+8 位移計算，不需要額外的時區套件。
+- **去重寫在 DB，不是記憶體。** 寄信前先往 `notification_log` insert 一列 `(session_id, stage, channel)`，那三欄有 unique constraint：insert 成功就由這一輪負責寄，撞到 unique violation（SQLSTATE `23505`）就代表別人已經寄過 → 跳過。互斥只靠一個 statement，不需要交易或 Redis，**所以 Railway 重啟、重新部署、開多個副本都不會重複寄信**。
+- **一天的補寄寬限。** 掃描區間刻意各多含一天：`d3` 掃「第 2～3 天」開課的場次、`d1` 掃「今天～明天」。若某天 09:00 那一輪整個失敗（例如 Supabase 剛好在維護），昨天該收 `d3` 的場次今天變成「2 天後」，仍然落在區間內，隔天自動補寄得掉。已經寄過的場次由 `notification_log` 擋住，不會因為區間變寬就重寄。
+- 兩個階段的區間**不重疊**（`d3` = 第 2～3 天、`d1` = 今天～明天），否則「明天開課但還沒收過 `d3`」的場次會在同一個早上一次收到兩封信。
+- **信件稱呼依實際剩餘天數決定，不是依階段代號。** 因為有補寄寬限，`d3` 有可能是開課前 2 天才寄出去，這時主旨會是「後天見」而不是「三天後見」——補寄還寫「三天後」等於告訴客人錯的日期。稱呼對照：0 天=今天、1=明天、2=後天、3=三天後。
 - 收件對象：該場次的 `order_items`，對應 `orders.status = 'paid'` 的訂單。未付款、已取消、已退款一律不寄。
 - `status = 'cancelled'` 的場次不寄。
 - **收件信箱優先用 `orders.contact_email`**（結帳時本人填的），沒有值且訂單有綁會員時才退回去查 `auth.users`（走 auth admin API，一次只能查一人）。
@@ -125,7 +131,10 @@ curl http://localhost:3001/healthz
    這樣只改 `apps/web/` 不會觸發 worker 重新部署。若要在 UI 覆寫，填一樣的值。
 3. **Variables**：至少要有 `SUPABASE_URL` 與 `SUPABASE_SERVICE_ROLE_KEY`，要寄信再加 `RESEND_API_KEY` 與 `MAIL_FROM`。
 4. **Health check**：`/healthz`（已在 `railway.json` 設定）。
-5. **Replicas 維持 1**（`numReplicas: 1`）。**這一點很重要**：目前的去重是記憶體級的，開兩個副本會讓同一封提醒信寄兩次。要擴充成多副本，得先做完下面「已知限制」第 1 點。
+5. **Replicas 維持 1**（`numReplicas: 1`）——但這**已經不是正確性的要求**了。
+   提醒信的去重改成 DB 級（`notification_log` 的 unique constraint）之後，多個副本同時跑也不會重複寄信，這個設定純粹是「沒必要多開」：
+   排程沒有跨副本協調（每個副本都有自己的 node-cron），多開只會讓同一批查詢跑兩遍、log 也變兩份 —— 尤其 `atm-reconciliation` 的人工對帳清單每小時印兩份會直接誤導看的人。
+   哪天真的需要（例如電子報要分批寄）再往上調是安全的，不必先改程式。
 
 指令對照：
 
@@ -155,29 +164,30 @@ start:  pnpm --filter worker start
 
 ## 已知限制（上線前請逐條確認）
 
-### 1. ⚠️ 提醒信去重是「記憶體級」的，重啟後會重寄
+> 舊版的第 1、2 點（「去重是記憶體級的，重啟後會重寄」與「沒有補寄機制」）已經解決 ——
+> 去重搬到 `notification_log`，掃描區間也多帶一天寬限。詳見上面的 `workshop-reminders` 段落。
+> 下面第 1 點是換完之後**剩下**的那一小塊。
 
-`src/lib/dedupe.ts` 用 process 記憶體記住「哪個場次的哪個階段已經寄過」。
+### 1. 提醒信「宣告之後、寄完之前」被砍掉會漏寄
 
-**這代表：**
-- Railway 每次 deploy、crash 重啟、平台搬遷 instance → 記錄清空。若當天 09:00 已寄過、重啟後又剛好觸發同一個 job，**同一批客人會收到第二封一樣的信**。
-- worker 若擴成 2 個以上副本，兩邊各有一份記憶體，**信會寄兩次**。所以 `numReplicas` 目前必須是 1。
+去重是**先宣告再寄**：先往 `notification_log` insert 佔位，成功才開始寄。反過來（寄完才記錄）會讓兩個副本同時通過檢查、同一封信寄兩次，而重複寄信是更該優先避免的問題。
 
-**正式解法**（正式上線前應該做）：建一張 `notification_log` 表，對 `(session_id, stage)` 下 unique constraint，寄信前先 insert，撞到 unique violation 就代表已經寄過 → 跳過。這樣重啟與多副本都安全。
+代價是這個窄窗：**insert 成功之後、`sendAll()` 還沒跑完之前，process 被強制砍掉（SIGKILL、OOM）的話，那個場次剩下的收件人就漏掉了，而且不會重試**——記錄已經在，隔天的補寄掃描會把它當成寄過了。
 
-當初評估過「借用 `orders.metadata` 存已寄狀態」，但那會把通知狀態塞進訂單資料裡、語意不對也難查詢，所以沒有採用。目前先誠實留著記憶體版本，不假裝問題已經解決。
+實際影響有限，但要知道它存在：
 
-### 2. 提醒信沒有補寄機制
+- 正常的 Railway 部署是 SIGTERM，worker 會等進行中的 job 跑完（最多 25 秒）才退出，不會踩到這個窗。
+- 若整輪失敗在 insert 之前（Supabase 掛掉、網路不通），根本不會留下記錄，隔天照樣補寄得到。
+- 個別收件人寄失敗（Resend 回錯）不會拋例外，會計進 `emails_failed` 並各留一筆 `email_send_failed`，**需要人工補寄**——這一點跟改版前一樣。
+- 補寄寬限只有一天。若連續兩天 09:00 都失敗，`d3` 就永久錯過了（場次已經變成「1 天後」，只會收到 `d1`）。要更保險就把 `reminderWindow()` 的寬限拉長，代價是同一場次每輪要多掃幾次。
 
-視窗是「台北時間整日」的精確比對。若某天 09:00 那次執行整個失敗（例如 Supabase 剛好在維護），那批 `d3` 提醒就**直接錯過**，隔天再跑時場次已經變成「2 天後」不在任何視窗內。
+要徹底解決得做「寄送狀態機」（claimed → sent，失敗回補），但那需要逐收件人記錄而不是逐場次，對單場十幾人的工作坊規模不划算。
 
-做完限制 1 的 `notification_log` 之後，就可以改成「查出所有該寄但沒寄過的場次」，自然具備補寄能力。
-
-### 3. `atm-reconciliation` 不會自動對帳
+### 2. `atm-reconciliation` 不會自動對帳
 
 如上所述，它只產清單、不改資料。ATM 訂單目前仍需人工確認並手動開通。
 
-### 4. 資料列型別是手寫的
+### 3. 資料列型別是手寫的
 
 `src/lib/types.ts` 依 STACK.md §3 手寫，不是 `supabase gen types` 產出的。**schema 改了但這裡沒改，編譯期不會報錯，會在執行期才發現。**
 
@@ -189,7 +199,7 @@ supabase gen types typescript --project-id <ref> > apps/worker/src/lib/database.
 
 然後把 `createServiceClient` 改成 `createClient<Database>(...)`，並移除 `src/lib/db.ts` 裡的型別斷言。
 
-### 5. 沒有 `contact_email` 的訂單要逐一查 auth admin API
+### 4. 沒有 `contact_email` 的訂單要逐一查 auth admin API
 
 多數訂單在結帳時就填了 `orders.contact_email`，直接用即可。只有「沒填 contact_email 且有綁會員」的訂單需要退回去查 `auth.admin.getUserById()`，而它一次只能查一個人 —— N 個這種訂單就是 N 次呼叫。
 
@@ -197,7 +207,7 @@ supabase gen types typescript --project-id <ref> > apps/worker/src/lib/database.
 
 另外，`contact_email` 目前沒有任何格式驗證（DB 端是純 `text`）。若結帳表單讓客人打錯字，這裡會照樣送給 Resend，失敗時記在 `email_send_failed`。要更嚴謹應該在結帳 API 或 DB constraint 擋。
 
-### 6. 沒有實作的項目
+### 5. 沒有實作的項目
 
 STACK.md §4 還列了兩項，這一版**沒有做**：
 - **影片轉檔／字幕**（第 4 點）
@@ -205,9 +215,15 @@ STACK.md §4 還列了兩項，這一版**沒有做**：
 
 另外 LINE 推播也還沒接，提醒目前只有 Email。
 
-### 7. 沒有自動化測試
+### 6. 沒有自動化測試
 
-這個 package 目前沒有 test runner。核心的時間視窗計算（`src/lib/time.ts`）與去重（`src/lib/dedupe.ts`）是最值得補測試的地方——它們決定「誰會收到信、會不會重複收到」。
+這個 package 目前沒有 test runner。最值得補測試的是決定「誰會收到信、會不會重複收到、信裡寫幾天後」的那幾塊：
+
+- `src/lib/time.ts` 的 `taipeiDayRange()` 與 `taipeiDaysUntil()`（台北日曆日計算）
+- `src/jobs/workshop-reminders.ts` 的 `reminderWindow()`：兩個階段的區間要相接且不重疊，下界不得早於 `now`
+- `copyForDaysUntil()`：補寄時的稱呼
+
+`claimNotification()` 的去重行為則需要真的連上一個 Postgres 才測得到（要驗的正是 unique constraint 的行為），適合放進日後的整合測試而不是單元測試。
 
 ---
 
@@ -218,6 +234,7 @@ STACK.md §4 還列了兩項，這一版**沒有做**：
 出現以下任一情況時，再把 Redis 加回來、改用佇列：
 
 - 需要**跨副本**的排程協調（多個 worker 不能重複跑同一個 job）
+  ——注意這指的是「不要白跑」，不是「不要重複寄信」：提醒信的去重已經由 `notification_log` 的 unique constraint 保證，不需要 Redis
 - 需要**任務重試與死信佇列**（例如寄信失敗要自動重試三次）
 - 出現由使用者操作觸發的**非同步長工作**（影片轉檔、批次匯出）
 - 電子報要寄給幾千人，需要分批與速率控制
@@ -242,10 +259,9 @@ apps/worker/
 │       ├── env.ts                  環境變數驗證，缺就 exit(1)
 │       ├── logger.ts               結構化 JSON log
 │       ├── supabase.ts             service role client
-│       ├── db.ts                   所有查詢集中在這裡
-│       ├── types.ts                手寫資料列型別（見限制 4）
+│       ├── db.ts                   所有查詢集中在這裡（含 notification_log 去重）
+│       ├── types.ts                手寫資料列型別（見限制 3）
 │       ├── time.ts                 台北時區計算與顯示格式
-│       ├── dedupe.ts               記憶體去重（見限制 1）
 │       ├── email.ts                Resend 寄信 / dry run
 │       ├── privacy.ts              log 遮罩
 │       ├── runner.ts               job 包裝：try/catch、計時、統計

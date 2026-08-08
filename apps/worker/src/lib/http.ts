@@ -22,7 +22,6 @@ export interface HealthSnapshot {
   dry_run: boolean;
   email_enabled: boolean;
   in_flight_jobs: number;
-  dedupe_entries: number;
   jobs: JobStats[];
 }
 

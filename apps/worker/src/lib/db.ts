@@ -12,10 +12,13 @@
 import type { ServiceClient, QueryError } from "./supabase.js";
 import { describeError, isSchemaMissingError } from "./supabase.js";
 import type {
+  NotificationChannel,
+  NotificationLogRow,
   OrderItemRow,
   OrderRow,
   ProductRow,
   ProfileRow,
+  ReminderStage,
   WorkshopSessionRow,
 } from "./types.js";
 
@@ -278,6 +281,82 @@ export async function fetchUserEmails(
     const email = response.data.user?.email;
     if (typeof email === "string" && email !== "") {
       out.set(userId, email);
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// 4. 通知寄送記錄（提醒信去重）
+// ---------------------------------------------------------------------------
+
+/**
+ * Postgres 的 unique_violation。PostgREST 會把 SQLSTATE 原樣放在 `error.code`，
+ * 所以在這一層就能分辨「撞到去重鍵」與「真的壞掉」。
+ */
+const UNIQUE_VIOLATION = "23505";
+
+const DEFAULT_CHANNEL: NotificationChannel = "email";
+
+/**
+ * 宣告「這個場次的這個階段由我來寄」。
+ *
+ * 回傳 `true` = 搶到了，這一輪該寄；
+ * 回傳 `false` = 別人已經寄過（另一個副本、或重啟前的自己）。
+ *
+ * 互斥完全靠 `notification_log_session_stage_key` 這個 unique constraint：
+ * insert 成功就是搶到，撞到 23505 就是別人先搶到。單一 statement 完成，
+ * 不需要交易、advisory lock 或 Redis —— 所以重啟與多副本都安全。
+ *
+ * ⚠️ 刻意「先宣告、再寄信」。
+ *    反過來（寄完才記錄）的話，兩個副本會同時通過檢查、同一封信寄兩次，
+ *    而重複寄信正是這張表要解決的問題，所以寧可先佔位。
+ *    代價：宣告成功之後、信還沒寄完之前 process 被強制砍掉（SIGKILL）的話，
+ *    那個場次的提醒會漏掉且不會重試。見 apps/worker/README.md「已知限制」。
+ */
+export async function claimNotification(
+  client: ServiceClient,
+  sessionId: string,
+  stage: ReminderStage,
+  channel: NotificationChannel = DEFAULT_CHANNEL,
+): Promise<boolean> {
+  // 不加 .select()：預設是 return=minimal，寄信只需要知道成功與否，不需要把列拉回來
+  const { error } = (await client
+    .from("notification_log")
+    .insert({ session_id: sessionId, stage, channel })) as Result<unknown>;
+
+  if (error === null) return true;
+  if (error.code === UNIQUE_VIOLATION) return false;
+  throw new DbError("insert notification_log", error);
+}
+
+/**
+ * 這批場次裡，哪些已經寄過這個階段的通知。
+ *
+ * 真正的互斥在 `claimNotification()`，這個查詢只是為了「先剔除再查資料」：
+ * 已寄過的場次不必再撈報名者、訂單與商品，省掉大部分往返。
+ * 掃描視窗帶了一天寬限（見 jobs/workshop-reminders.ts），
+ * 每個場次平均會被掃到兩次，這個預先剔除因此不是可有可無的優化。
+ */
+export async function findNotifiedSessionIds(
+  client: ServiceClient,
+  sessionIds: readonly string[],
+  stage: ReminderStage,
+  channel: NotificationChannel = DEFAULT_CHANNEL,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (sessionIds.length === 0) return out;
+
+  for (const batch of chunk(sessionIds, IN_CHUNK_SIZE)) {
+    const result = (await client
+      .from("notification_log")
+      .select("session_id")
+      .eq("stage", stage)
+      .eq("channel", channel)
+      .in("session_id", batch)) as Result<Pick<NotificationLogRow, "session_id">[]>;
+
+    for (const row of unwrapRows("select notification_log", result)) {
+      if (row.session_id !== null) out.add(row.session_id);
     }
   }
   return out;

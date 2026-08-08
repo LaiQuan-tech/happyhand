@@ -36,6 +36,22 @@ export function taipeiDayRange(daysFromNow: number, now: Date = new Date()): Ins
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
+/**
+ * 從「今天」到某個時間點差幾個台北**日曆日**。
+ *
+ * 刻意用日曆日而不是 24 小時的倍數：客人心裡的「明天」是日曆上的明天。
+ * 09:00 跑的 job 看明天 19:00 的課，答案要是 1（明天）而不是 1.4。
+ * 已經開始的場次回傳負數，呼叫端自行決定要不要當成 0。
+ */
+export function taipeiDaysUntil(iso: string, now: Date = new Date()): number {
+  const target = new Date(iso).getTime();
+  if (!Number.isFinite(target)) return 0;
+
+  const targetDay = Math.floor((target + TAIPEI_OFFSET_MS) / DAY_MS);
+  const todayDay = Math.floor((now.getTime() + TAIPEI_OFFSET_MS) / DAY_MS);
+  return targetDay - todayDay;
+}
+
 /** 現在時間往前推 n 天的 ISO 字串（用於「超過 N 天未付款」這類查詢）。 */
 export function isoDaysAgo(days: number, now: Date = new Date()): string {
   return new Date(now.getTime() - days * DAY_MS).toISOString();

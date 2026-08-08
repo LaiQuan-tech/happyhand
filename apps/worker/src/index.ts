@@ -14,7 +14,6 @@
 import { createTask, type ScheduledTask } from "node-cron";
 
 import { createHealthServer, type HealthSnapshot } from "./lib/http.js";
-import { dedupeStore } from "./lib/dedupe.js";
 import { createMailer } from "./lib/email.js";
 import { createRunner } from "./lib/runner.js";
 import { createServiceClient } from "./lib/supabase.js";
@@ -88,7 +87,6 @@ async function main(): Promise<void> {
     dry_run: env.dryRun,
     email_enabled: env.resendApiKey !== null && !env.dryRun,
     in_flight_jobs: runner.inFlightCount(),
-    dedupe_entries: dedupeStore.size(),
     jobs: runner.snapshot(),
   });
 

@@ -6,36 +6,77 @@
  *
  * 寄信走 Resend；沒有設定 RESEND_API_KEY 時只記 log 不寄（dry run）。
  *
- * ⚠️ 去重是記憶體級的，process 重啟後會重寄。詳見 src/lib/dedupe.ts 與 README。
+ * 去重寫在 DB 的 notification_log（寄信前先 insert 佔位，撞到 unique constraint
+ * 就代表已經寄過）→ 重啟與多副本都不會重寄。詳見 src/lib/db.ts 的
+ * claimNotification() 與 supabase/migrations/..._notification_log.sql。
  */
 
 import {
+  claimNotification,
   fetchUserEmails,
+  findNotifiedSessionIds,
   findOrderItemsBySessionIds,
   findPaidOrdersByIds,
   findProductsByIds,
   findProfilesByIds,
   findSessionsStartingBetween,
 } from "../lib/db.js";
-import { dedupeStore, reminderKey, type ReminderStage } from "../lib/dedupe.js";
 import type { EmailMessage, SendOutcome } from "../lib/email.js";
 import { maskEmail } from "../lib/privacy.js";
-import { formatTaipeiRange, taipeiDayRange } from "../lib/time.js";
+import {
+  formatTaipeiRange,
+  taipeiDayRange,
+  taipeiDaysUntil,
+  type InstantRange,
+} from "../lib/time.js";
 import type { JobContext, JobDefinition, JobResult } from "../lib/runner.js";
-import type { Attendee, ProductRow, WorkshopSessionRow } from "../lib/types.js";
+import type {
+  Attendee,
+  ProductRow,
+  ReminderStage,
+  WorkshopSessionRow,
+} from "../lib/types.js";
 
 /** 客服電話，來源：design_handoff_happyhands/CONTENT.md 的 FAQ。 */
 const SUPPORT_PHONE = "02-2833-5820";
 
-const STAGES: ReadonlyArray<{ stage: ReminderStage; daysAhead: number; label: string }> = [
-  { stage: "d3", daysAhead: 3, label: "三天後" },
-  { stage: "d1", daysAhead: 1, label: "明天" },
+const STAGES: ReadonlyArray<{ stage: ReminderStage; daysAhead: number }> = [
+  { stage: "d3", daysAhead: 3 },
+  { stage: "d1", daysAhead: 1 },
 ];
 
 interface SessionBundle {
   session: WorkshopSessionRow;
   product: ProductRow | null;
   attendees: Attendee[];
+}
+
+// ---------------------------------------------------------------------------
+// 掃描視窗
+// ---------------------------------------------------------------------------
+
+/**
+ * 某個階段這一輪要掃的時間區間。
+ *
+ * 「開課前 3 天」不是只掃第 3 天那一整天，而是掃**第 2 天到第 3 天**，
+ * 多含一天當補寄寬限：若昨天 09:00 那一輪整個失敗（例如 Supabase 剛好在維護），
+ * 昨天該收 d3 的場次今天變成「2 天後」，仍然落在區間內 → 今天補寄得掉。
+ * 已經寄過的場次由 notification_log 擋住，不會因為區間變寬就重寄。
+ *
+ * 兩個階段的區間刻意**不重疊**（d3 = 第 2～3 天、d1 = 今天～明天），
+ * 否則明天開課又還沒收過 d3 的場次，會在同一個早上一次收到兩封信。
+ *
+ * 下界不早於 now：已經開始的場次不必再提醒。
+ */
+function reminderWindow(daysAhead: number, now: Date): InstantRange {
+  const nowIso = now.toISOString();
+  // 兩者都是 toISOString() 的固定格式（UTC、毫秒補滿），字典序比較 = 時間先後
+  const slackStart = taipeiDayRange(daysAhead - 1, now).startIso;
+
+  return {
+    startIso: slackStart > nowIso ? slackStart : nowIso,
+    endIso: taipeiDayRange(daysAhead, now).endIso,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +191,40 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+interface ReminderCopy {
+  /** 主旨用的稱呼，會接上「見」 */
+  label: string;
+  /** 內文第一句 */
+  opening: string;
+}
+
+/**
+ * 稱呼依「實際還剩幾天」決定，不是依階段代號。
+ *
+ * 因為掃描視窗帶了一天補寄寬限（見 reminderWindow），d3 有可能是在開課前
+ * 2 天才補寄出去 —— 那時候還寫「三天後見」就是對客人說謊，
+ * 長輩客群更可能因此把日期記錯。
+ */
+const COPY_BY_DAYS: Record<number, ReminderCopy> = {
+  0: { label: "今天", opening: "今天就是上課的日子了，這封信提醒您時間和地點。" },
+  1: { label: "明天", opening: "明天就是上課的日子了，這封信提醒您時間和地點。" },
+  2: { label: "後天", opening: "再過兩天就要上課了，先把時間和地點提醒您一次。" },
+  3: { label: "三天後", opening: "再過三天就要上課了，先把時間和地點提醒您一次。" },
+};
+
+function copyForDaysUntil(daysUntil: number): ReminderCopy {
+  return (
+    COPY_BY_DAYS[daysUntil] ?? {
+      label: `${daysUntil} 天後`,
+      opening: `再過 ${daysUntil} 天就要上課了，先把時間和地點提醒您一次。`,
+    }
+  );
+}
+
 function buildMessage(
   bundle: SessionBundle,
   attendee: Attendee,
-  stage: ReminderStage,
+  daysUntil: number,
 ): EmailMessage | null {
   if (attendee.email === null) return null;
 
@@ -163,15 +234,9 @@ function buildMessage(
   const address = bundle.session.address ?? "";
   const greeting = attendee.fullName ?? "同學";
 
-  const subject =
-    stage === "d3"
-      ? `【快樂手】三天後見：${title}`
-      : `【快樂手】明天見：${title}`;
-
-  const openingLine =
-    stage === "d3"
-      ? `再過三天就要上課了，先把時間和地點提醒您一次。`
-      : `明天就是上課的日子了，這封信提醒您時間和地點。`;
+  const copy = copyForDaysUntil(daysUntil);
+  const subject = `【快樂手】${copy.label}見：${title}`;
+  const openingLine = copy.opening;
 
   const lines: string[] = [
     `${greeting} 您好，`,
@@ -242,8 +307,8 @@ async function handler(ctx: JobContext): Promise<JobResult> {
   let sessionsSkippedDuplicate = 0;
   let recipientsWithoutEmail = 0;
 
-  for (const { stage, daysAhead, label } of STAGES) {
-    const range = taipeiDayRange(daysAhead, ctx.now);
+  for (const { stage, daysAhead } of STAGES) {
+    const range = reminderWindow(daysAhead, ctx.now);
     const sessions = await findSessionsStartingBetween(
       ctx.supabase,
       range.startIso,
@@ -257,15 +322,21 @@ async function handler(ctx: JobContext): Promise<JobResult> {
       window_end: range.endIso,
       sessions: sessions.length,
     });
+    if (sessions.length === 0) continue;
 
-    // 已寄過的場次先剔除，才不用白跑後面的查詢
+    // 已寄過的場次先剔除，才不用白跑後面的查詢。
+    // 真正的互斥在下面的 claimNotification()，這裡純粹是省往返
+    // ——視窗帶了一天寬限，每個場次平均會被掃到兩次。
+    const alreadySent = await findNotifiedSessionIds(
+      ctx.supabase,
+      sessions.map((session) => session.id),
+      stage,
+    );
     const pending = sessions.filter((session) => {
-      if (dedupeStore.has(reminderKey(session.id, stage))) {
-        sessionsSkippedDuplicate += 1;
-        ctx.log.debug("reminder_skipped_duplicate", { stage, session_id: session.id });
-        return false;
-      }
-      return true;
+      if (!alreadySent.has(session.id)) return true;
+      sessionsSkippedDuplicate += 1;
+      ctx.log.debug("reminder_skipped_duplicate", { stage, session_id: session.id });
+      return false;
     });
     if (pending.length === 0) continue;
 
@@ -282,6 +353,20 @@ async function handler(ctx: JobContext): Promise<JobResult> {
     ]);
 
     for (const session of pending) {
+      // 先宣告再寄。insert 撞到 unique constraint = 別的副本剛接手，
+      // 或這個場次在上面的剔除清單算出來之後才被寄掉 → 這一輪不要碰。
+      // 反過來「寄完才記錄」會讓兩個副本同時通過檢查、同一封信寄兩次。
+      const claimed = await claimNotification(ctx.supabase, session.id, stage);
+      if (!claimed) {
+        sessionsSkippedDuplicate += 1;
+        ctx.log.info("reminder_claim_lost", {
+          stage,
+          session_id: session.id,
+          hint: "notification_log 已有這一列，代表別人已經寄過，這一輪跳過。",
+        });
+        continue;
+      }
+
       const attendees = attendeesBySession.get(session.id) ?? [];
       const bundle: SessionBundle = {
         session,
@@ -290,8 +375,8 @@ async function handler(ctx: JobContext): Promise<JobResult> {
       };
 
       if (attendees.length === 0) {
-        // 沒有已付款報名者：仍標記為處理過，避免每天重掃同一場次
-        dedupeStore.claim(reminderKey(session.id, stage));
+        // 沒有已付款報名者：上面的 claim 已經標記過，之後不會再重掃這個場次。
+        // （代價是這場次之後才報名的人收不到這一階段的提醒，但下一階段仍會寄。）
         ctx.log.info("reminder_no_attendees", {
           stage,
           session_id: session.id,
@@ -300,9 +385,12 @@ async function handler(ctx: JobContext): Promise<JobResult> {
         continue;
       }
 
+      // 稱呼用實際剩餘天數，補寄時才不會寫成「三天後見」（見 copyForDaysUntil）
+      const daysUntil = Math.max(0, taipeiDaysUntil(session.starts_at, ctx.now));
+
       const messages: EmailMessage[] = [];
       for (const attendee of attendees) {
-        const message = buildMessage(bundle, attendee, stage);
+        const message = buildMessage(bundle, attendee, daysUntil);
         if (message === null) {
           recipientsWithoutEmail += 1;
           ctx.log.warn("reminder_recipient_without_email", {
@@ -319,19 +407,17 @@ async function handler(ctx: JobContext): Promise<JobResult> {
         messages.push(message);
       }
 
+      // sendAll 不會拋例外：個別寄信失敗會被它 catch 起來計進 failed，
+      // 並各自留一筆 email_send_failed / email_send_error，需要人工補寄。
       const result = await ctx.mailer.sendAll(messages);
       tally.sent += result.sent;
       tally.dry_run += result.dry_run;
       tally.failed += result.failed;
       sessionsProcessed += 1;
 
-      // 標記在寄送迴圈之後：整個 job 若中途拋錯就不會誤標成已寄。
-      // 但個別收件者寄失敗仍會標記（失敗的那幾封已在 email_send_failed 記錄，需人工補寄）。
-      dedupeStore.claim(reminderKey(session.id, stage));
-
       ctx.log.info("reminder_session_processed", {
         stage,
-        stage_label: label,
+        days_until: daysUntil,
         session_id: session.id,
         starts_at: session.starts_at,
         product_slug: bundle.product?.slug ?? null,
@@ -361,6 +447,6 @@ async function handler(ctx: JobContext): Promise<JobResult> {
 export const workshopRemindersJob: JobDefinition = {
   name: "workshop-reminders",
   schedule: "0 9 * * *",
-  description: "每天台北時間 09:00 寄出開課前 3 天與前 1 天的工作坊提醒信",
+  description: "每天台北時間 09:00 寄出開課前 3 天與前 1 天的工作坊提醒信（含前一天失敗的補寄）",
   handler,
 };
