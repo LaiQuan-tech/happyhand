@@ -15,9 +15,9 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string; error?: string }>;
 }) {
-  const { redirect } = await searchParams;
+  const { redirect, error } = await searchParams;
 
   return (
     <div className="pb-[80px]">
@@ -27,7 +27,7 @@ export default async function LoginPage({
         lead="這裡是工作人員後台的入口。一般同學要看課程，請直接回首頁。"
       />
       <div className="px-[20px] md:px-[40px]">
-        <LoginForm redirect={redirect} />
+        <LoginForm redirect={redirect} initialError={error} />
       </div>
     </div>
   );

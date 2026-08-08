@@ -51,12 +51,19 @@ function safeRedirect(raw: string | undefined): string {
   return raw;
 }
 
-export function LoginForm({ redirect }: { redirect?: string }) {
+export function LoginForm({
+  redirect,
+  initialError,
+}: {
+  redirect?: string;
+  /** /auth/callback 換 session 失敗時會把原因帶回來 */
+  initialError?: string;
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError ?? "");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
 
