@@ -227,9 +227,11 @@ export default function HomePage() {
           </h2>
           <p className="mt-[12px] text-[18px] leading-[1.95]">
             {footerLineBeforePhone}
+            {/* 電話要能直接點撥，行內連結補上下 padding 讓觸控區達 44px */}
             <a
               href={SITE.phoneHref}
-              className="underline underline-offset-4 hover:text-cream-200"
+              aria-label={`打電話給我們 ${SITE.phone}`}
+              className="inline-block py-[9px] underline underline-offset-4 hover:text-cream-200"
             >
               {SITE.phone}
             </a>

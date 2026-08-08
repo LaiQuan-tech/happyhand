@@ -53,7 +53,8 @@ export function SiteFooter() {
           >
             打電話問 {SITE.phone}
           </a>
-          <p className="t-micro mt-[14px] text-brown-300">
+          {/* CONTENT.md：說明文字最小 16px，所以這裡不用 t-micro(15px) */}
+          <p className="t-caption mt-[14px] text-brown-500">
             服務時間 週一至週五 10:00–18:00
           </p>
         </div>
@@ -61,8 +62,9 @@ export function SiteFooter() {
 
       <div className="border-t border-sand-300">
         <div className="mx-auto max-w-maxw px-[20px] py-[20px] md:px-[40px]">
-          <p className="t-micro text-brown-300">{SITE.disclaimer}</p>
-          <p className="t-micro mt-2 text-brown-300">{SITE.copyright}</p>
+          {/* 免責聲明是法規要求的內容，不可以縮到 15px 灰字 */}
+          <p className="t-caption text-brown-500">{SITE.disclaimer}</p>
+          <p className="t-caption mt-2 text-brown-500">{SITE.copyright}</p>
         </div>
       </div>
     </footer>

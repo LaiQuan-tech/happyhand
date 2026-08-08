@@ -197,7 +197,7 @@ export default async function CourseDetailPage({
                 aria-labelledby="teacher-heading"
                 className="mt-[32px] rounded-card bg-cream-100 p-[26px_20px] md:mt-[40px] md:p-[34px_32px]"
               >
-                <div className="grid grid-cols-[76px_1fr] items-center gap-[16px] md:grid-cols-[120px_1fr] md:gap-[26px]">
+                <div className="grid grid-cols-[76px_1fr] items-start gap-[16px] md:grid-cols-[120px_1fr] md:items-center md:gap-[26px]">
                   <Figure
                     alt={`${TEACHER.name} 照片`}
                     rounded="rounded-full"

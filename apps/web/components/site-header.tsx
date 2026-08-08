@@ -30,7 +30,8 @@ export function SiteHeader() {
         ))}
         <Link
           href="/"
-          className="font-serif text-[26px] font-bold tracking-[0.14em] text-caramel-ink"
+          aria-label="快樂手 首頁"
+          className="flex min-h-[44px] items-center font-serif text-[26px] font-bold tracking-[0.14em] text-caramel-ink"
         >
           {SITE.brandZh}
         </Link>
@@ -54,7 +55,8 @@ export function SiteHeader() {
         </button>
         <Link
           href="/"
-          className="font-serif text-[21px] font-bold tracking-[0.14em] text-caramel-ink"
+          aria-label="快樂手 首頁"
+          className="flex min-h-[44px] items-center px-2 font-serif text-[21px] font-bold tracking-[0.14em] text-caramel-ink"
         >
           {SITE.brandZh}
         </Link>

@@ -81,8 +81,8 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
           alt={`${product.title} 上課現場`}
           label="workshop cover 16:9"
           rounded="rounded-card"
-          className="mt-[12px] aspect-[16/9] w-full"
-          sizes="(min-width: 1280px) 1160px, 100vw"
+          className="mt-[12px] aspect-[16/9] w-full max-w-[860px]"
+          sizes="(min-width: 900px) 860px, 100vw"
           priority
         />
 
@@ -148,22 +148,24 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
             <h2 className="t-h3">上課地點</h2>
             <p className="t-body mt-[10px] text-brown-500">{venueName}</p>
             <p className="t-body mt-[4px] text-brown-500">{address}</p>
-            <div className="mt-[16px] flex flex-col gap-[10px] md:flex-row">
+            <div className="mt-[16px] flex flex-col flex-wrap gap-[10px] md:flex-row">
+              {/* 用原生 <a> 是為了帶 target/rel — LinkButton 對外部連結不會轉發這些屬性 */}
               <a
                 href={mapHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={buttonClass({
                   variant: "outline",
-                  className: "w-full md:w-auto",
+                  className: "w-full shrink-0 whitespace-nowrap md:w-auto",
                 })}
               >
-                打開 Google 地圖（另開視窗）
+                看 Google 地圖
+                <span className="sr-only">（另開新視窗）</span>
               </a>
               <LinkButton
                 href={SITE.phoneHref}
                 variant="outline"
-                className="w-full whitespace-nowrap md:w-auto"
+                className="w-full shrink-0 whitespace-nowrap md:w-auto"
               >
                 打電話問路 {SITE.phone}
               </LinkButton>

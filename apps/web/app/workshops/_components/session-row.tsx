@@ -74,8 +74,8 @@ export function SessionRow({
             {detailHref ? (
               <Link
                 href={detailHref}
-                /* -my/py 對消：點擊區加高到約 44px，但不撐開列高 */
-                className="-my-[8px] inline-block py-[8px] transition-colors duration-200 hover:text-caramel-ink"
+                /* -my/py 對消：點擊區補到 56px（樂齡族需求），但不撐開列高 */
+                className="-my-[11px] inline-block py-[11px] transition-colors duration-200 hover:text-caramel-ink"
               >
                 {session.title}
               </Link>

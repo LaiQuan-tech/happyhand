@@ -25,21 +25,23 @@ export function LessonList({ lessons }: { lessons: Lesson[] }) {
             key={`${lesson.title}-${i}`}
             className="flex items-center justify-between gap-[12px] border-b border-sand-300 px-[20px] py-[18px] md:px-[24px] md:py-[20px]"
           >
-            <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] md:gap-x-[14px]">
+            <div className="flex min-w-0 flex-1 items-center gap-[10px] md:gap-[14px]">
               <span
                 aria-hidden
-                className="font-serif text-[16px] text-brown-300 md:text-[18px]"
+                className="shrink-0 font-serif text-[16px] text-brown-300 md:text-[18px]"
               >
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <span className="text-[17px] leading-[1.5] text-brown-900 md:text-[18px]">
-                {lesson.title}
-              </span>
-              {lesson.free_preview ? (
-                <span className="rounded-pill bg-caramel-dk px-[12px] py-[4px] text-[16px] leading-[1.4] text-white">
-                  可試看
+              <span className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px]">
+                <span className="text-[17px] leading-[1.5] text-brown-900 md:text-[18px]">
+                  {lesson.title}
                 </span>
-              ) : null}
+                {lesson.free_preview ? (
+                  <span className="rounded-pill bg-caramel-dk px-[12px] py-[4px] text-[16px] leading-[1.4] text-white">
+                    可試看
+                  </span>
+                ) : null}
+              </span>
             </div>
             <span className="shrink-0 text-[16px] text-brown-300">
               {formatDuration(lesson.duration_sec)}

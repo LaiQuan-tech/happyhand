@@ -27,6 +27,7 @@ type CartContext = {
   ready: boolean;
   add: (item: CartItem) => void;
   remove: (productId: string, sessionId?: string | null) => void;
+  setQty: (productId: string, qty: number, sessionId?: string | null) => void;
   clear: () => void;
 };
 
@@ -56,25 +57,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items, ready]);
 
+  /** sessionId 一律正規化成 null 再比對：線上課常常傳 undefined，
+      undefined !== null 會讓 remove() 永遠比不到、按了移除沒反應。 */
+  const sameLine = (a: CartItem, productId: string, sessionId?: string | null) =>
+    a.productId === productId && (a.sessionId ?? null) === (sessionId ?? null);
+
   const add = useCallback((item: CartItem) => {
+    const normalized: CartItem = { ...item, sessionId: item.sessionId ?? null };
     setItems((prev) => {
-      const i = prev.findIndex(
-        (x) => x.productId === item.productId && x.sessionId === item.sessionId,
+      const i = prev.findIndex((x) =>
+        sameLine(x, normalized.productId, normalized.sessionId),
       );
-      if (i === -1) return [...prev, item];
+      if (i === -1) return [...prev, normalized];
       const next = [...prev];
-      next[i] = { ...next[i], qty: next[i].qty + item.qty };
+      next[i] = { ...next[i], qty: next[i].qty + normalized.qty };
       return next;
     });
   }, []);
 
   const remove = useCallback((productId: string, sessionId?: string | null) => {
-    setItems((prev) =>
-      prev.filter(
-        (x) => !(x.productId === productId && x.sessionId === (sessionId ?? null)),
-      ),
-    );
+    setItems((prev) => prev.filter((x) => !sameLine(x, productId, sessionId)));
   }, []);
+
+  const setQty = useCallback(
+    (productId: string, qty: number, sessionId?: string | null) => {
+      setItems((prev) =>
+        qty <= 0
+          ? prev.filter((x) => !sameLine(x, productId, sessionId))
+          : prev.map((x) =>
+              sameLine(x, productId, sessionId) ? { ...x, qty } : x,
+            ),
+      );
+    },
+    [],
+  );
 
   const clear = useCallback(() => setItems([]), []);
 
@@ -86,9 +102,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       total: items.reduce((n, x) => n + x.qty * x.priceSnapshot, 0),
       add,
       remove,
+      setQty,
       clear,
     }),
-    [items, ready, add, remove, clear],
+    [items, ready, add, remove, setQty, clear],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

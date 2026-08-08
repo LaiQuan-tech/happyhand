@@ -150,7 +150,8 @@ export default async function AccountPage() {
         note="報上當初填的姓名或電話就可以，不用記訂單編號。"
       />
 
-      <MobileActionBar href={SITE.phoneHref} label="打電話問" />
+      {/* 行動列左邊已經是「打電話問」，右邊再放一次會變成兩顆一樣的鈕 */}
+      <MobileActionBar href="/courses" label="看線上課程" />
     </div>
   );
 }

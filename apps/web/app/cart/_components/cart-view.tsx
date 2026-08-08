@@ -26,32 +26,20 @@ const QTY_BUTTON =
   "flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-pill border-2 border-sand-400 text-[22px] text-brown-900 transition-colors duration-200 hover:bg-cream-300 disabled:border-sand-300 disabled:text-brown-300 disabled:hover:bg-transparent";
 
 export function CartView() {
-  const { items, total, ready, add, clear } = useCart();
+  const { items, total, ready, remove, setQty } = useCart();
 
-  /**
-   * 移除。
-   *
-   * 沒有直接用 CartProvider 的 remove()：它內部以
-   * `x.sessionId === (sessionId ?? null)` 比對，當項目本身的 sessionId 是
-   * undefined（線上課常見）時永遠比不到，按了不會有反應。共用層不能改，
-   * 所以這裡用「清空後把其餘項目照原順序加回去」保證一定移得掉。
-   */
+  /** CartProvider 已把 sessionId 正規化成 null 再比對，直接用 remove() 即可 */
   const removeItem = useCallback(
-    (target: CartItem) => {
-      const rest = items.filter((x) => keyOf(x) !== keyOf(target));
-      clear();
-      rest.forEach((x) => add(x));
-    },
-    [items, add, clear],
+    (target: CartItem) => remove(target.productId, target.sessionId),
+    [remove],
   );
 
-  /** 數量增減：add() 會依 productId + sessionId 合併，帶負數即為減一 */
   const changeQty = useCallback(
     (item: CartItem, delta: 1 | -1) => {
       if (delta === -1 && item.qty <= 1) return;
-      add({ ...item, qty: delta });
+      setQty(item.productId, item.qty + delta, item.sessionId);
     },
-    [add],
+    [setQty],
   );
 
   return (
