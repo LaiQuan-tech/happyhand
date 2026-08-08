@@ -206,7 +206,7 @@ export default function HomePage() {
           ))}
           <Link
             href="/teachers"
-            className="mt-[16px] inline-block border-b border-caramel pt-[10px] pb-[5px] text-[18px] text-brown-900 transition-colors duration-200 hover:text-caramel-ink"
+            className="mt-[16px] inline-block border-b border-caramel pt-[11px] pb-[6px] text-[18px] text-brown-900 transition-colors duration-200 hover:text-caramel-ink"
           >
             看完整師資介紹 →
           </Link>

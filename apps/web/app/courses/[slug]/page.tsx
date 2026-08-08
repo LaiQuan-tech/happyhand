@@ -68,7 +68,7 @@ export default async function CourseDetailPage({
           >
             <Link
               href="/courses"
-              className="inline-block py-[8px] text-brown-700 underline-offset-4 hover:text-caramel-dk hover:underline"
+              className="inline-block py-[11px] text-brown-700 underline-offset-4 hover:text-caramel-dk hover:underline"
             >
               線上課程
             </Link>
@@ -169,7 +169,7 @@ export default async function CourseDetailPage({
                   不會線上付款也沒關係，打{" "}
                   <a
                     href={SITE.phoneHref}
-                    className="inline-block py-[4px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
+                    className="-my-[7px] inline-block py-[11px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
                   >
                     {SITE.phone}
                   </a>{" "}
