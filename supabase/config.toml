@@ -1,0 +1,95 @@
+# 快樂手 HAPPY HEALING HANDS — Supabase CLI 專案設定
+# 文件：https://supabase.com/docs/guides/local-development/cli/config
+#
+# 這份設定主要影響「本機開發」(supabase start) 與 shadow DB。
+# 遠端專案的設定仍以 Supabase Dashboard 為準。
+
+project_id = "happyhands"
+
+[api]
+enabled = true
+port = 54321
+# PostgREST 對外開放的 schema。刻意只留 public，
+# 不要把 storage / auth 開出來（會繞過我們的授權設計）。
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# 長輩使用者不會一次撈幾萬筆，設上限避免誤查把 DB 拖垮
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# ⚠️ 必須與遠端 Supabase 專案的 Postgres 版本一致，
+#    不然 `supabase db diff` 會產生假的差異。
+#    在 Dashboard → Settings → Infrastructure 可以查到實際版本。
+major_version = 17
+
+[db.pooler]
+# 本機不需要 pooler；正式環境用 Supabase 的 Supavisor。
+# Vercel serverless / Railway worker 連線請走 transaction mode（port 6543），
+# 不要用 5432 直連，否則 serverless 冷啟會把連線數吃光。
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# 種子資料寫在 migrations/20260808000003_seed.sql，
+# 不使用 CLI 的 seed.sql 機制，避免同一份資料兩個來源。
+enabled = false
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1:54321"
+
+# 本機收信箱：測試註冊 / 登入信會落在這裡，不會真的寄出去
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# 課程影片檔案偏大，放寬單檔上限。
+# ⚠️ course-videos bucket 一律 private，播放由 server 簽 2 小時 URL。
+file_size_limit = "500MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = [
+  "http://127.0.0.1:3000",
+  "http://localhost:3000",
+  "https://happyhands.tw",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# 本機開發不強制驗證信箱，方便測試；正式環境請在 Dashboard 開啟。
+enable_confirmations = false
+secure_password_change = true
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+inspector_port = 8083
