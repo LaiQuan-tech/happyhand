@@ -5,7 +5,7 @@ import { useCart, type CartItem } from "@/components/cart-provider";
 import { LinkButton } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { SITE, formatPrice } from "@/lib/site";
-import { CheckoutSteps } from "@/app/checkout/_components/checkout-steps";
+import { CheckoutSteps } from "@/app/(storefront)/checkout/_components/checkout-steps";
 
 const TYPE_LABEL: Record<CartItem["type"], string> = {
   course: "線上課程",

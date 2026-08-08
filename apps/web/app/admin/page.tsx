@@ -1,0 +1,348 @@
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getStaff } from "@/lib/admin/guard";
+import { can } from "@/lib/admin/roles";
+import { createServiceClient } from "@/lib/supabase/server";
+import { DataList } from "@/components/admin/data-list";
+import { formatTaipei } from "@/components/admin/datetime-field";
+
+/**
+ * 後台總覽。
+ *
+ * 每一塊都依 capability 決定要不要出現：內容編輯（editor）拿不到任何 orders:* 能力，
+ * 所以他看不到訂單與營收數字——那是刻意的權限切分，不是漏做。
+ *
+ * 讀取一律走 service role：後台要看得到草稿課程與所有訂單，
+ * 使用者自己的 session client 會被 RLS 擋掉大半。
+ * 授權在上面 can() 與 layout 的 getStaff()，不靠 RLS。
+ *
+ * ⚠️ 每一個查詢都各自 try/catch。總覽是六塊獨立資訊拼起來的，
+ *    一塊查壞了應該只有那一塊顯示「讀取失敗」，不是整頁白畫面。
+ * ⚠️ audit_log 與 workshop_waitlist 的 migration 還沒 push，這頁不查那兩張表。
+ */
+
+export const dynamic = "force-dynamic";
+
+type Db = ReturnType<typeof createServiceClient>;
+
+type SessionRow = {
+  id: string;
+  starts_at: string;
+  location: string | null;
+  capacity: number;
+  seats_taken: number;
+  status: string;
+  products: { title: string | null } | { title: string | null }[] | null;
+};
+
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  open: "開放報名",
+  full: "已額滿",
+  closed: "已關閉",
+  cancelled: "已取消",
+};
+
+function money(value: number): string {
+  return `NT$ ${value.toLocaleString("zh-TW")}`;
+}
+
+/** PostgREST 的內嵌關聯有時是物件、有時是陣列，這裡統一收斂 */
+function productTitle(row: SessionRow): string {
+  const product = Array.isArray(row.products) ? row.products[0] : row.products;
+  return product?.title ?? "（找不到課程）";
+}
+
+export default async function AdminDashboardPage() {
+  // layout 已經擋過一次，這裡再拿一次是為了 role（layout 無法把值傳給 page）。
+  const staff = await getStaff();
+  if (!staff) redirect("/login?redirect=/admin");
+
+  let db: Db | null = null;
+  try {
+    db = createServiceClient();
+  } catch (err) {
+    // SUPABASE_SERVICE_ROLE_KEY 沒設時 createServiceClient() 會 throw。
+    console.error("[admin] service client 建立失敗", err);
+  }
+
+  const showOrders = can(staff.role, "orders:read");
+  const showCatalog = can(staff.role, "catalog:read");
+
+  const [orderStats, catalogStats, sessions] = await Promise.all([
+    showOrders ? loadOrderStats(db) : null,
+    showCatalog ? loadCatalogStats(db) : null,
+    loadUpcomingSessions(db),
+  ]);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-serif text-[24px] leading-tight font-medium text-ink">
+          總覽
+        </h1>
+        <p className="mt-1 text-[14px] text-ink-soft">
+          你好，{staff.email ?? "同事"}。以下只顯示你權限範圍內的資料。
+        </p>
+      </div>
+
+      {/* orderStats 只有在 showOrders 時才會是非 null。
+          寫成 `showOrders && orderStats.error` 的話 TS 無法把布林值與 null 關聯起來，
+          直接判物件本身既通過型別檢查也更誠實。 */}
+      {orderStats && (
+        <Section title="訂單" href="/admin/orders" linkLabel="查看全部訂單">
+          {orderStats.error ? (
+            <LoadError message={orderStats.error} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 admin:grid-cols-3">
+              <StatCard
+                label="待收款訂單"
+                value={String(orderStats.pending)}
+                unit="筆"
+                emphasis={orderStats.pending > 0}
+                note={orderStats.pending > 0 ? "需要人工確認匯款" : "目前都處理完了"}
+              />
+              <StatCard
+                label="近 7 天成立訂單"
+                value={String(orderStats.recentCount)}
+                unit="筆"
+              />
+              <StatCard
+                label="近 7 天已收款"
+                value={money(orderStats.recentPaidTotal)}
+                note="只計算狀態為已付款的訂單"
+              />
+            </div>
+          )}
+        </Section>
+      )}
+
+      {catalogStats && (
+        <Section title="課程與工作坊" href="/admin/products" linkLabel="管理課程">
+          {catalogStats.error ? (
+            <LoadError message={catalogStats.error} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 admin:grid-cols-3">
+              <StatCard label="已發布" value={String(catalogStats.published)} unit="門" />
+              <StatCard
+                label="草稿"
+                value={String(catalogStats.draft)}
+                unit="門"
+                note={catalogStats.draft > 0 ? "尚未對外顯示" : undefined}
+              />
+            </div>
+          )}
+        </Section>
+      )}
+
+      <Section title="即將開課的場次">
+        {sessions.error ? (
+          <LoadError message={sessions.error} />
+        ) : (
+          <DataList
+            items={sessions.rows}
+            keyOf={(row) => row.id}
+            caption="即將開課的工作坊場次與剩餘名額"
+            empty="目前沒有即將開課的場次。新增場次後會出現在這裡。"
+            columns={[
+              {
+                header: "課程",
+                primary: true,
+                cell: (row) => productTitle(row),
+              },
+              {
+                header: "狀態",
+                trailing: true,
+                cell: (row) => (
+                  <StatusChip
+                    label={SESSION_STATUS_LABEL[row.status] ?? row.status}
+                    tone={row.status === "full" ? "warn" : "ok"}
+                  />
+                ),
+              },
+              {
+                header: "開始時間",
+                cell: (row) => formatTaipei(row.starts_at),
+              },
+              {
+                header: "地點",
+                cell: (row) => row.location ?? "—",
+              },
+              {
+                header: "剩餘名額",
+                align: "right",
+                cell: (row) => {
+                  const left = row.capacity - row.seats_taken;
+                  return (
+                    <span className={left <= 0 ? "text-danger" : undefined}>
+                      {left} / {row.capacity}
+                    </span>
+                  );
+                },
+              },
+            ]}
+          />
+        )}
+      </Section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ 查詢 */
+
+async function loadOrderStats(db: Db | null) {
+  const empty = { pending: 0, recentCount: 0, recentPaidTotal: 0, error: "" };
+  if (!db) return { ...empty, error: "資料庫連線未設定，請檢查伺服器環境變數。" };
+
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [pending, recent] = await Promise.all([
+      db.from("orders").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      db.from("orders").select("total, status").gte("created_at", sevenDaysAgo),
+    ]);
+
+    // Supabase 查詢失敗不會 throw，錯誤在回傳值的 error 欄位。
+    // 不顯式檢查的話數字會永遠是 0 而沒人發現。
+    if (pending.error) throw new Error(pending.error.message);
+    if (recent.error) throw new Error(recent.error.message);
+
+    const rows = (recent.data ?? []) as { total: number; status: string }[];
+    return {
+      pending: pending.count ?? 0,
+      recentCount: rows.length,
+      recentPaidTotal: rows
+        .filter((row) => row.status === "paid")
+        .reduce((sum, row) => sum + (row.total ?? 0), 0),
+      error: "",
+    };
+  } catch (err) {
+    console.error("[admin] 訂單統計查詢失敗", err);
+    return { ...empty, error: "訂單統計讀取失敗。" };
+  }
+}
+
+async function loadCatalogStats(db: Db | null) {
+  const empty = { published: 0, draft: 0, error: "" };
+  if (!db) return { ...empty, error: "資料庫連線未設定，請檢查伺服器環境變數。" };
+
+  try {
+    const [published, draft] = await Promise.all([
+      db.from("products").select("id", { count: "exact", head: true }).eq("is_published", true),
+      db.from("products").select("id", { count: "exact", head: true }).eq("is_published", false),
+    ]);
+    if (published.error) throw new Error(published.error.message);
+    if (draft.error) throw new Error(draft.error.message);
+
+    return { published: published.count ?? 0, draft: draft.count ?? 0, error: "" };
+  } catch (err) {
+    console.error("[admin] 課程統計查詢失敗", err);
+    return { ...empty, error: "課程統計讀取失敗。" };
+  }
+}
+
+async function loadUpcomingSessions(db: Db | null) {
+  const empty = { rows: [] as SessionRow[], error: "" };
+  if (!db) return { ...empty, error: "資料庫連線未設定，請檢查伺服器環境變數。" };
+
+  try {
+    const { data, error } = await db
+      .from("workshop_sessions")
+      .select("id, starts_at, location, capacity, seats_taken, status, products(title)")
+      .gt("starts_at", new Date().toISOString())
+      .in("status", ["open", "full"])
+      .order("starts_at", { ascending: true })
+      .limit(8);
+    if (error) throw new Error(error.message);
+
+    return { rows: (data ?? []) as SessionRow[], error: "" };
+  } catch (err) {
+    console.error("[admin] 場次查詢失敗", err);
+    return { ...empty, error: "場次讀取失敗。" };
+  }
+}
+
+/* ------------------------------------------------------------------ 版面 */
+
+function Section({
+  title,
+  href,
+  linkLabel,
+  children,
+}: {
+  title: string;
+  href?: string;
+  linkLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2.5 flex items-baseline justify-between gap-3">
+        <h2 className="text-[16px] font-medium text-ink">{title}</h2>
+        {href && linkLabel && (
+          <Link
+            href={href}
+            className="shrink-0 text-[13px] text-accent-ink hover:underline"
+          >
+            {linkLabel}
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  unit,
+  note,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  note?: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-card border p-4 ${
+        emphasis ? "border-accent bg-panel" : "border-line bg-paper"
+      }`}
+    >
+      <div className="text-[13px] text-ink-soft">{label}</div>
+      <div className="mt-1.5 flex items-baseline gap-1">
+        <span className="font-serif text-[24px] leading-none font-medium text-ink">
+          {value}
+        </span>
+        {unit && <span className="text-[13px] text-ink-soft">{unit}</span>}
+      </div>
+      {note && <div className="mt-1.5 text-[12px] leading-snug text-ink-soft">{note}</div>}
+    </div>
+  );
+}
+
+function StatusChip({ label, tone }: { label: string; tone: "ok" | "warn" }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-pill bg-chip px-2.5 py-1 text-[12px] font-medium whitespace-nowrap ${
+        tone === "ok" ? "text-ok" : "text-danger"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function LoadError({ message }: { message: string }) {
+  return (
+    <p className="rounded-card border border-line bg-panel px-4 py-3 text-[14px] text-ink-soft">
+      {message}
+      <span className="block text-[13px]">
+        其他區塊不受影響。詳細錯誤已記在伺服器 log。
+      </span>
+    </p>
+  );
+}

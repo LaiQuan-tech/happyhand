@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CheckoutView } from "@/app/checkout/_components/checkout-view";
+import { CheckoutView } from "@/app/(storefront)/checkout/_components/checkout-view";
 
 export const metadata: Metadata = {
   title: "填寫資料與付款",

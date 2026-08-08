@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 import { can, toRole, isStaffRole, type Capability, type Role } from "@/lib/admin/roles";
 
@@ -39,8 +40,13 @@ export class AdminAuthError extends Error {
 /**
  * 目前登入者的員工身分。未登入、不是員工、或環境變數沒設定都回 null。
  * 不 throw —— 給 layout 與顯示層用。
+ *
+ * 用 React.cache() 包起來：App Router 沒辦法從 layout 把值傳給 page，
+ * 所以 admin/layout.tsx 與每個 admin 頁面都會各自呼叫一次。
+ * 沒有這層去重的話，每個後台請求會跑兩次 auth.getUser() 加兩次 profiles 查詢。
+ * cache 的存活範圍就是單一次請求，不會跨使用者汙染。
  */
-export async function getStaff(): Promise<Staff | null> {
+export const getStaff = cache(async function getStaff(): Promise<Staff | null> {
   if (!hasSupabaseEnv()) return null;
 
   try {
@@ -70,7 +76,7 @@ export async function getStaff(): Promise<Staff | null> {
     console.error("[admin/guard] getStaff 例外", err);
     return null;
   }
-}
+});
 
 /**
  * 要求特定能力，不符合就 throw。給 server action 用。

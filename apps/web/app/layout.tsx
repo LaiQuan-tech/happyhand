@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_TC, Noto_Serif_TC } from "next/font/google";
 import "./globals.css";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { CartProvider } from "@/components/cart-provider";
 import { SITE } from "@/lib/site";
 
 /**
@@ -59,19 +56,12 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-Hant-TW" className={`${notoSans.variable} ${notoSerif.variable}`}>
-      <body>
-        <CartProvider>
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-pill focus:bg-caramel-ink focus:px-6 focus:py-3 focus:text-white"
-          >
-            跳到主要內容
-          </a>
-          <SiteHeader />
-          <main id="main">{children}</main>
-          <SiteFooter />
-        </CartProvider>
-      </body>
+      {/*
+        這一層刻意只留 html/body/字體/metadata。
+        前台的導覽列、頁尾、購物車 provider 在 app/(storefront)/layout.tsx，
+        後台的側欄與分頁在 app/admin/layout.tsx，兩邊互不影響。
+      */}
+      <body>{children}</body>
     </html>
   );
 }

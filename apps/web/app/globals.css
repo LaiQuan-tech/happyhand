@@ -47,6 +47,45 @@
   /* 斷點：< 768 手機、768–1279 平板、>= 1280 桌機 */
   --breakpoint-md: 768px;
   --breakpoint-lg: 1280px;
+
+  /* ----------------------------------------------------------
+     後台（/admin）專用
+     ----------------------------------------------------------
+     前台的 lg 是 1280，因為設計稿的桌機版就是 1280。
+     但後台清單若沿用 lg 切換「手機卡片 / 桌機表格」，
+     1024–1279 的筆電會拿到手機卡片版 —— 那個寬度明明放得下表格。
+     所以後台自己有一組 1024 的斷點，一律用 admin: 前綴。
+     Tailwind v4 會自動由 --breakpoint-* 產生 admin: / max-admin: variant。 */
+  --breakpoint-admin: 1024px;
+
+  /* 後台語意別名。
+     Tailwind v4 遇到不存在的 token 不會報錯，只是靜默不產生 class，
+     所以後台不逐檔寫 text-brown-900，而是走這組別名；
+     日後要調後台配色只改這裡。 */
+  --color-ink: var(--color-brown-900); /* 主要文字 11.5:1 on white */
+  --color-ink-soft: var(--color-brown-500); /* 次要文字 5.73:1 on white */
+  --color-ink-muted: var(--color-brown-300); /* ⚠️ 僅 3.49:1，只可用於圖示／佔位／裝飾，不可放內文 */
+  --color-paper: #ffffff;
+  --color-panel: var(--color-cream-100);
+  --color-line: var(--color-sand-300);
+  --color-line-strong: var(--color-sand-400);
+  --color-accent: var(--color-caramel-ink);
+  --color-ok: #3f6b4a; /* 6.15:1 on white、5.57:1 on cream-200，與焦糖同為低彩度暖調 */
+  --color-danger: var(--color-error);
+
+  /* 以下四個是我額外加的，理由寫在各自後面（見交付說明）。 */
+
+  /* accent(#A96C3C) 對白只有 4.29:1，內文與白字徽章都達不到 AA。
+     凡是「有字」的 accent 一律用 accent-ink(#8A5227, 6.33:1)，
+     --color-accent 保留給色塊／底線／hover 這種非文字用途（門檻 3:1）。 */
+  --color-accent-ink: var(--color-caramel-dk);
+  /* 導覽 active 底色。比 panel 深一階才看得出來，且 ink 在其上 8.84:1。 */
+  --color-accent-soft: var(--color-sand-300);
+  /* 表單外框。sand-400 對白只有 1.71:1，達不到 WCAG 1.4.11 對表單邊界的 3:1，
+     後台輸入框改用 brown-300(3.49:1)。 */
+  --color-line-input: var(--color-brown-300);
+  /* 狀態徽章底色，ok / danger / ink-soft 在其上都 >= 4.9:1。 */
+  --color-chip: var(--color-cream-200);
 }
 
 /* ============================================================

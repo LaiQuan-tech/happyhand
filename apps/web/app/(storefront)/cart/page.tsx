@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CartView } from "@/app/cart/_components/cart-view";
+import { CartView } from "@/app/(storefront)/cart/_components/cart-view";
 
 export const metadata: Metadata = {
   title: "購物車",

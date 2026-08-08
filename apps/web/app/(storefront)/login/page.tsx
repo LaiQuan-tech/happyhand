@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageHero } from "@/app/_components/page-hero";
-import { LoginForm } from "@/app/login/_components/login-form";
+import { LoginForm } from "@/app/(storefront)/login/_components/login-form";
 
 export const metadata: Metadata = {
   title: "登入",

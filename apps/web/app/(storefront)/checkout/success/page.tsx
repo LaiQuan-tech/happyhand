@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LinkButton } from "@/components/ui/button";
 import { SITE } from "@/lib/site";
-import { CheckoutSteps } from "@/app/checkout/_components/checkout-steps";
+import { CheckoutSteps } from "@/app/(storefront)/checkout/_components/checkout-steps";
 
 export const metadata: Metadata = {
   title: "報名完成",
