@@ -1,0 +1,34 @@
+import type { Metadata } from "next";
+import { PageHero } from "@/app/_components/page-hero";
+import { LoginForm } from "@/app/login/_components/login-form";
+
+export const metadata: Metadata = {
+  title: "登入",
+  description: "快樂手工作人員登入。",
+  robots: { index: false, follow: false },
+};
+
+/**
+ * 登入頁。前台版型，因為員工也是從一般網站點進來的。
+ * middleware 未登入時會導到這裡並帶 ?redirect=<原本要去的路徑>。
+ */
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect?: string }>;
+}) {
+  const { redirect } = await searchParams;
+
+  return (
+    <div className="pb-[80px]">
+      <PageHero
+        eyebrow="LOGIN"
+        title="登入"
+        lead="這裡是工作人員後台的入口。一般同學要看課程，請直接回首頁。"
+      />
+      <div className="px-[20px] md:px-[40px]">
+        <LoginForm redirect={redirect} />
+      </div>
+    </div>
+  );
+}
