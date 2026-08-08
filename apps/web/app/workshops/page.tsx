@@ -94,7 +94,12 @@ export default async function WorkshopsPage() {
         </div>
       </section>
 
-      <MobileActionBar href={SITE.phoneHref} label="打電話報名" />
+      {/* 主要動作就是撥號，關掉左邊的電話鈕改成單顆滿版，長輩更好按 */}
+      <MobileActionBar
+        href={SITE.phoneHref}
+        label={`打電話報名 ${SITE.phone}`}
+        showPhone={false}
+      />
     </div>
   );
 }

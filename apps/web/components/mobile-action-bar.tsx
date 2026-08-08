@@ -8,24 +8,31 @@ import { LinkButton } from "@/components/ui/button";
 export function MobileActionBar({
   href = "/courses",
   label = "開始線上練習",
+  showPhone = true,
 }: {
   href?: string;
   label?: string;
+  /** 主要動作本身就是撥號時設 false，否則會出現兩顆一樣的電話鈕 */
+  showPhone?: boolean;
 }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-sand-300 bg-white/96 px-[16px] pb-[calc(12px+env(safe-area-inset-bottom))] pt-[12px] backdrop-blur-sm md:hidden">
       <div className="flex gap-[10px]">
-        <LinkButton
-          href={SITE.phoneHref}
-          variant="outline"
-          className="flex-1 px-2 text-[17px]"
-        >
-          打電話問
-        </LinkButton>
+        {showPhone && (
+          <LinkButton
+            href={SITE.phoneHref}
+            variant="outline"
+            className="flex-1 px-2 text-[17px]"
+          >
+            打電話問
+          </LinkButton>
+        )}
         <LinkButton
           href={href}
           variant="primary"
-          className="flex-[1.4] px-2 text-[17px]"
+          className={
+            showPhone ? "flex-[1.4] px-2 text-[17px]" : "flex-1 px-2 text-[17px]"
+          }
         >
           {label}
         </LinkButton>
