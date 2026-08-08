@@ -74,9 +74,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 固定版號：用 latest 會去打 GitHub API 解析版本，撞到 rate limit 就整個 job 失敗
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.113.0
 
       - name: Link project
         run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
