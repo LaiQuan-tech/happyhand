@@ -124,3 +124,8 @@ supabase db push
 - **影片**：Storage 私有 bucket 與簽名 URL 尚未建立。
 - **素材**：設計稿中的斜紋色塊都是圖片佔位，等客戶提供照片（清單見 `design_handoff_happyhands/README.md` §8）。
 - **網域**：目前是 Vercel 預設網域，`happyhands.tw` 尚未掛上。
+- **字型未自架 subset**：目前用 `next/font/google` 載 Noto Sans TC / Noto Serif TC，
+  兩個 CJK family 會展開 800+ 條 `@font-face`，約 **70 KB（brotli）的 render-blocking CSS**
+  （全站 CSS 合計 79 KB，其中應用程式本身只有 8 KB）。已砍掉未使用的字重 300。
+  要再降低就得照 `design_handoff_happyhands/README.md` §8 的建議自架 subset：
+  用 `pyftsubset` 依實際用字產生 woff2，再自己寫 `@font-face`。對長輩的慢速網路值得做。

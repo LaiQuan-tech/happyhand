@@ -6,9 +6,15 @@ import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/components/cart-provider";
 import { SITE } from "@/lib/site";
 
+/**
+ * CJK 字型的 @font-face 宣告很貴：每個 family × 每個字重會展開上百條
+ * unicode-range，兩個 family 目前佔約 70 KB（brotli 後）的 render-blocking CSS。
+ * 所以只載真的用到的字重 —— 300 全站 0 次使用，已移除。
+ * 要再降就得自架 subset（見 README「尚未完成」）。
+ */
 const notoSans = Noto_Sans_TC({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
+  weight: ["400", "500", "700"],
   variable: "--font-noto-sans-tc",
   display: "swap",
   preload: false,
