@@ -82,6 +82,12 @@ export function LoginForm({
         const { data, error: err } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: {
+            // 不指定的話 Supabase 會導回 site_url（也就是首頁），
+            // 那裡沒有東西處理網址上的 ?code=，使用者會覺得「點了驗證信什麼都沒發生」。
+            // 導到 /auth/callback 才會把 code 換成 session 並直接進後台。
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(target)}`,
+          },
         });
         if (err) throw new Error(mapAuthError(err.message));
 
