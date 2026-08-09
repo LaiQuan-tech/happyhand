@@ -76,7 +76,7 @@ export default function TeachersPage() {
         </div>
       </section>
 
-      <CallBand note="想先問問看課程適不適合你，或是想確認台北實體班的日期，打給我們就好。" />
+      <CallBand note="想先問問看課程適不適合你，或是想確認台北實體班的日期，用 LINE 問我們就好。" />
 
       <MobileActionBar href="/courses" label="開始線上練習" />
     </div>

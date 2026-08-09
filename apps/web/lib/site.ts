@@ -7,10 +7,19 @@ export const SITE = {
   companyEn: "GOOD DAY LOVE INC.",
   taxId: "53912857",
   representative: "劉柳樺",
-  phone: "02-2833-5820",
-  phoneHref: "tel:0228335820",
+  /**
+   * 聯絡方式一律走 LINE 官方帳號，站上不再放電話。
+   *
+   * lineLabel 是給人看的顯示字（按鈕、內文），lineHref 是實際連結。
+   * ⚠️ 這是外部連結（page.line.me），所有 <a> 要記得 target/rel，
+   *    或直接用 LinkButton —— 它會自動判斷 http 開頭走原生 <a>。
+   */
+  lineId: "@hao2082l",
+  lineLabel: "LINE 好友",
+  lineHref: "https://page.line.me/hao2082l",
   address: "臺北市中山區新生北路三段 1 號 9 樓之 15",
-  footerLine: "好日子股份有限公司・02-2833-5820・臺北市中山區新生北路三段 1 號 9 樓之 15",
+  footerLine:
+    "好日子股份有限公司・LINE @hao2082l・臺北市中山區新生北路三段 1 號 9 樓之 15",
   copyright: "Copyright © 2026 快樂手",
   /** 法規要求：不得有醫療宣稱 */
   disclaimer:

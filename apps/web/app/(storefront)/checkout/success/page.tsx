@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LinkButton } from "@/components/ui/button";
+import { LinkButton, buttonClass } from "@/components/ui/button";
 import { SITE } from "@/lib/site";
 import { CheckoutSteps } from "@/app/(storefront)/checkout/_components/checkout-steps";
 
@@ -19,15 +19,15 @@ function one(v: string | string[] | undefined) {
 const PAYMENT_NOTE: Record<string, { title: string; body: string }> = {
   credit: {
     title: "關於信用卡付款",
-    body: `線上刷卡還在開通中，所以我們會打 ${SITE.phone} 跟你確認付款方式。現在還沒有跟你收款，請放心。`,
+    body: "線上刷卡還在開通中，所以我們會用 LINE 跟你確認付款方式。現在還沒有跟你收款，請放心。",
   },
   atm: {
     title: "關於 ATM 匯款",
-    body: `匯款帳號請打 ${SITE.phone} 跟我們拿，戶名是${SITE.company}。匯款後我們對帳完成就會開通，大約 1 個工作天。`,
+    body: `匯款帳號請用 LINE 跟我們拿，戶名是${SITE.company}。匯款後我們對帳完成就會開通，大約 1 個工作天。`,
   },
   manual: {
-    title: "我們會打給你",
-    body: `這筆訂單是請我們代訂的。我們會打電話跟你確認課程與付款方式；等不及的話也可以直接打 ${SITE.phone} 找我們。`,
+    title: "我們會用 LINE 跟你聯絡",
+    body: "這筆訂單是請我們代訂的。我們會用 LINE 跟你確認課程與付款方式；等不及的話也可以直接用 LINE 找我們。",
   },
 };
 
@@ -74,12 +74,12 @@ export default async function CheckoutSuccessPage({
                   {orderNo}
                 </p>
                 <p className="mt-[6px] text-[16px] text-brown-300">
-                  打電話問我們的時候，念這一組號碼就可以了
+                  用 LINE 問我們的時候，把這一組號碼貼給我們就可以了
                 </p>
               </div>
             ) : (
               <p className="t-body mx-auto mt-[18px] max-w-[640px] text-brown-500">
-                {`如果要查詢這筆報名，打 ${SITE.phone} 給我們，報一下你的姓名與手機號碼就可以了。`}
+                {"如果要查詢這筆報名，用 LINE 問我們，報一下你的姓名與手機號碼就可以了。"}
               </p>
             )}
           </div>
@@ -136,15 +136,20 @@ export default async function CheckoutSuccessPage({
           </div>
 
           <div className="mt-[24px] text-center">
-            <p className="t-caption text-brown-500">有問題隨時打給我們，有真人接電話。</p>
-            <LinkButton
-              href={SITE.phoneHref}
-              variant="dark"
-              size="lg"
-              className="mt-[12px] w-full sm:w-auto"
+            <p className="t-caption text-brown-500">有問題隨時用 LINE 說，有真人回訊息。</p>
+            <a
+              href={SITE.lineHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({
+                variant: "dark",
+                size: "lg",
+                className: "mt-[12px] w-full sm:w-auto",
+              })}
             >
-              打 {SITE.phone}
-            </LinkButton>
+              加我們的 LINE
+              <span className="sr-only">（會開啟 LINE）</span>
+            </a>
           </div>
 
           <p className="mt-[32px] text-center text-[16px] leading-[1.8] text-brown-300">

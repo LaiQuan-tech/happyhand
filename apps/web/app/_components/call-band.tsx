@@ -1,16 +1,16 @@
 import { SITE } from "@/lib/site";
 
 /**
- * 焦糖色「打電話問」出口（設計稿 930–933 行桌機、973–977 行手機）
- * 每一頁都要有這一段（README 無障礙需求：每頁都要有打電話的出口）。
- * 手機稿的白色撥號鈕在桌機也保留，桌機改為置中的膠囊按鈕。
+ * 焦糖色「用 LINE 問」出口（設計稿 930–933 行桌機、973–977 行手機）
+ * 每一頁都要有這一段（README 無障礙需求：每頁都要有聯絡我們的出口）。
+ * 手機稿的白色聯絡鈕在桌機也保留，桌機改為置中的膠囊按鈕。
  */
 export function CallBand({
   heading = (
     <>
       想問什麼都可以，
       <br className="md:hidden" />
-      我們有真人接電話
+      我們有真人回訊息
     </>
   ),
   note,
@@ -31,11 +31,15 @@ export function CallBand({
           </p>
         )}
 
+        {/* 外部連結，要自己帶 target/rel — LinkButton 對外部連結不會轉發這些屬性 */}
         <a
-          href={SITE.phoneHref}
+          href={SITE.lineHref}
+          target="_blank"
+          rel="noopener noreferrer"
           className="mx-auto mt-[18px] flex min-h-[56px] w-full items-center justify-center rounded-pill bg-white px-[24px] text-[19px] text-brown-900 transition-colors duration-200 hover:bg-cream-200 md:mt-[24px] md:inline-flex md:w-auto md:px-[40px]"
         >
-          打電話 {SITE.phone}
+          加我們的 LINE
+          <span className="sr-only">（會開啟 LINE）</span>
         </a>
 
         <p className="t-caption mt-[16px] text-white">

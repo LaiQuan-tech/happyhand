@@ -47,7 +47,7 @@ export type Capability =
  * 訂單裡有姓名、電話、Email、寄送地址，內容編輯的工作不需要看到這些。
  * 這是這個權限切分真正的價值，不是形式。
  *
- * sessions:status 同時給 editor 與 support：現場滿了通常是接電話的人先知道，
+ * sessions:status 同時給 editor 與 support：現場滿了通常是收 LINE 訊息的人先知道，
  * 但「改日期／地點／價格」仍然只有 catalog:write 才行。
  * 實作上是兩支不同的 server action（setSessionStatus vs upsertSession），
  * 不是在同一支裡開洞。

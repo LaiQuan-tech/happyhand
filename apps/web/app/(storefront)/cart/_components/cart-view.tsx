@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useCart, type CartItem } from "@/components/cart-provider";
-import { LinkButton } from "@/components/ui/button";
+import { LinkButton, buttonClass } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { SITE, formatPrice } from "@/lib/site";
 import { CheckoutSteps } from "@/app/(storefront)/checkout/_components/checkout-steps";
@@ -163,16 +163,21 @@ export function CartView() {
 
               <div className="mt-[16px] border-t border-sand-300 pt-[16px]">
                 <p className="text-[16px] leading-[1.8] text-brown-500">
-                  不方便自己操作？打電話給我們，我們幫你處理。
+                  不方便自己操作？用 LINE 告訴我們，我們幫你處理。
                 </p>
-                <LinkButton
-                  href={SITE.phoneHref}
-                  variant="outline"
-                  fullWidth
-                  className="mt-[12px]"
+                <a
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass({
+                    variant: "outline",
+                    fullWidth: true,
+                    className: "mt-[12px]",
+                  })}
                 >
-                  打 {SITE.phone}
-                </LinkButton>
+                  加我們的 LINE
+                  <span className="sr-only">（會開啟 LINE）</span>
+                </a>
               </div>
             </aside>
           </div>
@@ -236,7 +241,7 @@ function EmptyCart() {
         購物車還是空的
       </p>
       <p className="t-body mx-auto mt-[12px] max-w-[520px] text-brown-500">
-        還沒有選課程。看看有哪些課，或是打電話問我們哪一門適合你。
+        還沒有選課程。看看有哪些課，或是用 LINE 問我們哪一門適合你。
       </p>
       <div className="mt-[28px] flex flex-col items-center justify-center gap-[12px] sm:flex-row">
         <LinkButton
@@ -247,14 +252,19 @@ function EmptyCart() {
         >
           看看有哪些課
         </LinkButton>
-        <LinkButton
-          href={SITE.phoneHref}
-          variant="outline"
-          size="lg"
-          className="w-full sm:w-auto"
+        <a
+          href={SITE.lineHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClass({
+            variant: "outline",
+            size: "lg",
+            className: "w-full sm:w-auto",
+          })}
         >
-          打 {SITE.phone}
-        </LinkButton>
+          加我們的 LINE
+          <span className="sr-only">（會開啟 LINE）</span>
+        </a>
       </div>
     </div>
   );

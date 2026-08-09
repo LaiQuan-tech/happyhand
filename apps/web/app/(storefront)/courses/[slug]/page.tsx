@@ -6,7 +6,7 @@ import { TEACHER, FAQS } from "@/lib/content";
 import { SITE, formatPrice } from "@/lib/site";
 import { Figure } from "@/components/ui/placeholder";
 import { Accordion } from "@/components/ui/accordion";
-import { LinkButton } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { LessonList } from "../_components/lesson-list";
 import { AddToCartButton } from "../_components/add-to-cart-button";
 import { CourseBuyBar } from "../_components/course-buy-bar";
@@ -153,15 +153,20 @@ export default async function CourseDetailPage({
                   className="mt-[20px] hidden md:block"
                 />
 
-                <LinkButton
-                  href={SITE.phoneHref}
-                  variant="outline"
-                  size="md"
-                  fullWidth
-                  className="mt-[20px] md:mt-[10px]"
+                <a
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass({
+                    variant: "outline",
+                    size: "md",
+                    fullWidth: true,
+                    className: "mt-[20px] md:mt-[10px]",
+                  })}
                 >
-                  先打電話問問
-                </LinkButton>
+                  先用 LINE 問問
+                  <span className="sr-only">（會開啟 LINE）</span>
+                </a>
 
                 <ul className="mt-[24px] flex flex-col gap-[12px] border-t border-sand-300 pt-[20px] text-[17px] leading-[1.6] text-brown-700">
                   {product.benefits.map((b) => (
@@ -175,14 +180,17 @@ export default async function CourseDetailPage({
                 </ul>
 
                 <p className="mt-[20px] rounded-input bg-cream-100 px-[18px] py-[16px] text-[16px] leading-[1.8] text-brown-500">
-                  不會線上付款也沒關係，打{" "}
+                  不會線上付款也沒關係，
                   <a
-                    href={SITE.phoneHref}
+                    href={SITE.lineHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="-my-[7px] inline-block py-[11px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
                   >
-                    {SITE.phone}
-                  </a>{" "}
-                  我們幫你處理。
+                    用 LINE 問我們
+                    <span className="sr-only">（會開啟 LINE）</span>
+                  </a>
+                  ，我們幫你處理。
                 </p>
               </div>
             </aside>

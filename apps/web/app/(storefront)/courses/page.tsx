@@ -7,7 +7,7 @@ import { CourseFilter } from "./_components/course-filter";
 export const metadata: Metadata = {
   title: "線上課程",
   description:
-    "在家慢慢練的線上課程，每一堂都可以永久回放，看不懂的地方隨時倒帶重來。也有實體工作坊與節氣訂閱計畫，不確定從哪堂開始可以打 02-2833-5820 問我們。",
+    "在家慢慢練的線上課程，每一堂都可以永久回放，看不懂的地方隨時倒帶重來。也有實體工作坊與節氣訂閱計畫，不確定從哪堂開始可以用 LINE 問我們。",
 };
 
 export const revalidate = 300;
@@ -42,14 +42,17 @@ export default async function CoursesPage() {
               課程清單暫時讀不到，可能是系統正在更新。
             </p>
             <p className="t-body mt-[8px] text-brown-500">
-              想知道有哪些課，打{" "}
+              想知道有哪些課，
               <a
-                href={SITE.phoneHref}
+                href={SITE.lineHref}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="-my-[7px] inline-block py-[11px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
               >
-                {SITE.phone}
-              </a>{" "}
-              我們直接告訴你。
+                用 LINE 問我們
+                <span className="sr-only">（會開啟 LINE）</span>
+              </a>
+              ，我們直接告訴你。
             </p>
           </div>
         )}

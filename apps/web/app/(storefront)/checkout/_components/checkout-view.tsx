@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/components/cart-provider";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button, LinkButton, buttonClass } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Figure } from "@/components/ui/placeholder";
 import { findProduct } from "@/lib/content";
@@ -140,7 +140,7 @@ export function CheckoutView() {
       console.error("[checkout] 建立訂單失敗", err);
       setBusy(false);
       setFormError(
-        `訂單沒有送出去。請再按一次「確認送出訂單」，或直接打 ${SITE.phone} 給我們，我們幫你完成報名。`,
+        "訂單沒有送出去。請再按一次「確認送出訂單」，或直接用 LINE 問我們，我們幫你完成報名。",
       );
       window.requestAnimationFrame(() => alertRef.current?.focus());
     }
@@ -319,16 +319,21 @@ export function CheckoutView() {
 
               <div className="mt-[16px] border-t border-sand-300 pt-[16px]">
                 <p className="text-[16px] leading-[1.8] text-brown-500">
-                  填到一半卡住了？打電話給我們，我們陪你一起填。
+                  填到一半卡住了？用 LINE 問我們，我們陪你一起填。
                 </p>
-                <LinkButton
-                  href={SITE.phoneHref}
-                  variant="outline"
-                  fullWidth
-                  className="mt-[12px]"
+                <a
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass({
+                    variant: "outline",
+                    fullWidth: true,
+                    className: "mt-[12px]",
+                  })}
                 >
-                  打 {SITE.phone}
-                </LinkButton>
+                  加我們的 LINE
+                  <span className="sr-only">（會開啟 LINE）</span>
+                </a>
               </div>
             </aside>
           </form>
@@ -380,14 +385,19 @@ function EmptyCartNotice() {
         >
           回課程列表
         </LinkButton>
-        <LinkButton
-          href={SITE.phoneHref}
-          variant="outline"
-          size="lg"
-          className="w-full sm:w-auto"
+        <a
+          href={SITE.lineHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonClass({
+            variant: "outline",
+            size: "lg",
+            className: "w-full sm:w-auto",
+          })}
         >
-          打 {SITE.phone}
-        </LinkButton>
+          加我們的 LINE
+          <span className="sr-only">（會開啟 LINE）</span>
+        </a>
       </div>
     </div>
   );

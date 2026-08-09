@@ -53,11 +53,15 @@ export function SiteFooter() {
 
         <div>
           <h2 className="t-caption font-medium text-brown-900">有問題想問</h2>
+          {/* 外部連結，要自己帶 target/rel — LinkButton 對外部連結不會轉發這些屬性 */}
           <a
-            href={SITE.phoneHref}
+            href={SITE.lineHref}
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-[12px] flex min-h-[56px] w-full items-center justify-center rounded-pill border-2 border-sand-400 text-[18px] text-brown-900 transition-colors duration-200 hover:bg-[#F5E7CE] md:w-auto md:px-[28px]"
           >
-            打電話問 {SITE.phone}
+            用 LINE 問我們
+            <span className="sr-only">（會開啟 LINE）</span>
           </a>
           {/* CONTENT.md：說明文字最小 16px，所以這裡不用 t-micro(15px) */}
           <p className="t-caption mt-[14px] text-brown-500">

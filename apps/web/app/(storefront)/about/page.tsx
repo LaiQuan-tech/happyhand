@@ -141,7 +141,7 @@ export default function AboutPage() {
         <div className="mx-auto max-w-[900px] px-[20px] py-[40px] md:px-[40px] md:py-[72px]">
           <h2 className="t-h2 text-center">關於好日子</h2>
           <p className="t-body mx-auto mt-[14px] max-w-[620px] text-center text-pretty text-brown-500 md:mt-[18px]">
-            快樂手是好日子股份有限公司的品牌。找得到人，也找得到地址，有事情打電話就好。
+            快樂手是好日子股份有限公司的品牌。找得到人，也找得到地址，有事情用 LINE 說就好。
           </p>
 
           <dl className="mt-[24px] overflow-hidden rounded-card border border-sand-300 bg-white md:mt-[34px]">
@@ -155,13 +155,16 @@ export default function AboutPage() {
               </div>
             ))}
             <div className="grid gap-[2px] px-[22px] py-[10px] md:grid-cols-[160px_1fr] md:items-center md:gap-[20px] md:px-[30px] md:py-[12px]">
-              <dt className="t-caption text-brown-500">電話</dt>
+              <dt className="t-caption text-brown-500">LINE</dt>
               <dd>
                 <a
-                  href={SITE.phoneHref}
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex min-h-[56px] items-center text-[19px] text-caramel-ink underline underline-offset-[6px] hover:text-caramel-dk"
                 >
-                  {SITE.phone}
+                  {SITE.lineId}
+                  <span className="sr-only">（會開啟 LINE）</span>
                 </a>
               </dd>
             </div>

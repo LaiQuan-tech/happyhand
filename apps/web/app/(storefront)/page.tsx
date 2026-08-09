@@ -5,8 +5,9 @@ import { LinkButton } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { REASONS, TEACHER } from "@/lib/content";
-import { getProducts } from "@/lib/data";
+import { getProducts, getWorkshopSessions } from "@/lib/data";
 import { SITE, formatPrice } from "@/lib/site";
+import { HomeWorkshops } from "./_components/home-workshops";
 
 /**
  * 首頁 /
@@ -39,14 +40,23 @@ const HOME_COURSE_SLUGS: { slug: string; hideOnMobile?: boolean }[] = [
   { slug: "main-central-flow" },
 ];
 
-/** footerLine 內的電話要能直接撥打，把字串切成「前段 / 電話 / 後段」 */
-const [footerLineBeforePhone, footerLineAfterPhone] = SITE.footerLine.split(
-  SITE.phone,
+/** footerLine 內的 LINE ID 要能直接點開，把字串切成「前段 / LINE ID / 後段」 */
+const [footerLineBeforeLine, footerLineAfterLine] = SITE.footerLine.split(
+  SITE.lineId,
 );
 
 export default async function HomePage() {
-  const all = await getProducts();
+  const [all, sessions] = await Promise.all([
+    getProducts(),
+    getWorkshopSessions(),
+  ]);
   const courses = all.filter((p) => p.type === "course");
+
+  // 只有 type=workshop 的商品有單場詳情頁。讀脈入門課是 course 卻掛著實體場次，
+  // 它的標題不能連到 /workshops/[slug]，否則是 404。與 /workshops 列表頁同一套判斷。
+  const workshopSlugs = new Set(
+    all.filter((p) => p.type === "workshop").map((p) => p.slug),
+  );
 
   const picked = HOME_COURSE_SLUGS.flatMap(({ slug, hideOnMobile }) => {
     const product = courses.find((p) => p.slug === slug);
@@ -209,6 +219,12 @@ export default async function HomePage() {
       </section>
       )}
 
+      {/* ── 3.5 工作坊 ── 設計稿沒有這一段，是後來補的。
+          放在課程與老師之間：線上課是低門檻入口，工作坊是更高的承諾，
+          而且它有「特定日期 + 剩幾位」這種線上課沒有的具體性。
+          先讓人看到具體的東西，再用老師那段收信任。 */}
+      <HomeWorkshops sessions={sessions} workshopSlugs={workshopSlugs} />
+
       {/* ── 4. 老師 ── 設計稿 L107–118（桌機；手機稿未收錄本區，改上下堆疊） */}
       <section
         aria-labelledby="teacher-title"
@@ -254,19 +270,21 @@ export default async function HomePage() {
             id="contact-title"
             className="font-serif text-[24px] leading-[1.4] font-medium md:text-[32px]"
           >
-            想問什麼都可以，我們有真人接電話
+            想問什麼都可以，我們有真人回訊息
           </h2>
           <p className="mt-[12px] text-[18px] leading-[1.95]">
-            {footerLineBeforePhone}
-            {/* 電話要能直接點撥，行內連結補上下 padding 讓觸控區達 44px */}
+            {footerLineBeforeLine}
+            {/* LINE ID 要能直接點開，行內連結補上下 padding 讓觸控區達 44px */}
             <a
-              href={SITE.phoneHref}
-              aria-label={`打電話給我們 ${SITE.phone}`}
+              href={SITE.lineHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="用 LINE 聯絡我們（會開啟 LINE）"
               className="inline-block py-[9px] underline underline-offset-4 hover:text-cream-200"
             >
-              {SITE.phone}
+              {SITE.lineId}
             </a>
-            {footerLineAfterPhone}
+            {footerLineAfterLine}
           </p>
         </div>
       </section>

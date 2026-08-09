@@ -4,7 +4,7 @@
 仁神術（Jin Shin Jyutsu, JSJ）線上課程與實體工作坊。
 
 主要客群是退休樂齡族（60–75 歲），**可及性是硬性需求不是加分項**：
-內文最小 17px、按鈕高度 ≥ 56px、每頁都要有打電話出口、支援放大到 200% 不破版。
+內文最小 17px、按鈕高度 ≥ 56px、每頁都要有 LINE 聯絡出口、支援放大到 200% 不破版。
 
 ---
 
@@ -56,8 +56,10 @@ SUPABASE_SERVICE_ROLE_KEY=      # 只在 server 使用，勿加 NEXT_PUBLIC_
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-> 資料層（`apps/web/lib/data.ts`）在讀不到 Supabase 時會 fallback 回 `apps/web/lib/content.ts`
-> 的靜態資料，所以沒有設環境變數網站也跑得起來，只是不會有即時名額。
+> 資料層（`apps/web/lib/data.ts`）**以資料庫為唯一真相，沒有靜態 fallback**。
+> 查得到但零筆 → 顯示誠實的空狀態；連不上 → 記 log 後回空，靠 ISR 的舊快取撐著。
+> 曾經有過「查不到就退回 `lib/content.ts`」的設計，但有了後台之後那會變成 bug：
+> 把課程全部下架反而會讓前台冒出舊資料，而且不會有任何錯誤。
 
 ## 部署
 
@@ -176,6 +178,20 @@ bucket 會單向長大，長期需要清理腳本。以目前規模一年不到 
 
 `seats_taken` 仍然有作用：結帳時的可用名額 = `capacity − seats_taken − 未付款但已下單`。
 
+### 聯絡方式：LINE 官方帳號
+
+站上**不再放電話**，所有聯絡出口都指向 LINE 官方帳號 `@hao2082l`
+（`https://page.line.me/hao2082l`）。唯一真相在 `apps/web/lib/site.ts` 的
+`lineId` / `lineLabel` / `lineHref`。
+
+⚠️ 那是**外部連結**，不是 `tel:`。手寫 `<a>` 要自己帶 `target="_blank"` 與
+`rel="noopener noreferrer"`；`LinkButton` 現在會在 `href` 以 `http` 開頭時
+自動帶上（呼叫端仍可覆寫）。純圖示或短標籤的連結要補
+`<span className="sr-only">（會開啟 LINE）</span>`，讓螢幕閱讀器知道會開新分頁。
+
+後台的 `tel:` 連結是**刻意保留**的：客人結帳時仍會留電話，客服在手機後台
+點一下就能撥出去，那是他們最常做的下一步。
+
 ### 報名名單 CSV 是個資出口
 
 姓名＋電話＋Email＋地址會一次打包離開系統。每次匯出都會寫進 `audit_log`
@@ -206,8 +222,8 @@ Excel 吃掉電話開頭的 0、UTF-8 中文亂碼（Excel 只看 BOM）。
 
 ## 尚未完成
 
-- **金流**：綠界 ECPay 尚未串接（缺商店代號／HashKey／HashIV）。目前結帳會建立 `pending` 訂單，由人工電話確認。
-- **Auth**：Supabase Auth 尚未接上，`/account` 為骨架頁。
+- **金流**：綠界 ECPay 尚未串接（缺商店代號／HashKey／HashIV）。目前結帳會建立 `pending` 訂單，由客服用 LINE 確認。
+- **會員功能**：Supabase Auth 已接上（員工登入與後台可用），但 `/account` 的會員中心仍是骨架頁 —— `orders.user_id` 目前永遠是 null（全站訪客結帳），所以會員查不到自己的訂單。要做得先設計「訪客訂單如何綁到後來註冊的帳號」。
 - **影片**：Storage 私有 bucket 與簽名 URL 尚未建立。
 - **素材**：設計稿中的斜紋色塊都是圖片佔位，等客戶提供照片（清單見 `design_handoff_happyhands/README.md` §8）。
 - **網域**：目前是 Vercel 預設網域，`happyhands.tw` 尚未掛上。

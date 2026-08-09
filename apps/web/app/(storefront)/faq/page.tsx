@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SITE } from "@/lib/site";
 import { FAQS } from "@/lib/content";
 import { Accordion, type AccordionItem } from "@/components/ui/accordion";
-import { LinkButton } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { PageHero } from "@/app/_components/page-hero";
 import { CallBand } from "@/app/_components/call-band";
@@ -10,7 +10,7 @@ import { CallBand } from "@/app/_components/call-band";
 export const metadata: Metadata = {
   title: "常見問題",
   description:
-    "快樂手常見問題：零基礎能不能學、線上課程看多久、ATM 匯款、課本寄送、工作坊改期與候補。找不到答案就打 02-2833-5820，有真人接電話。",
+    "快樂手常見問題：零基礎能不能學、線上課程看多久、ATM 匯款、課本寄送、工作坊改期與候補。找不到答案就加我們的 LINE @hao2082l，有真人回訊息。",
 };
 
 /**
@@ -29,7 +29,7 @@ const GROUPS: { title: string; picks: string[]; extra: AccordionItem[] }[] = [
     extra: [
       {
         q: "用手機看課程可以嗎？字太小看不清楚怎麼辦？",
-        a: "可以。手機、平板、電腦都看得到。字幕大小可以自己調，影片也能放慢。真的調不出來，打 02-2833-5820 給我們，我們在電話裡陪你設定一次。",
+        a: "可以。手機、平板、電腦都看得到。字幕大小可以自己調，影片也能放慢。真的調不出來，用 LINE 告訴我們，我們在 LINE 上陪你設定一次。",
       },
     ],
   },
@@ -39,11 +39,11 @@ const GROUPS: { title: string; picks: string[]; extra: AccordionItem[] }[] = [
     extra: [
       {
         q: "不會線上付款怎麼辦？",
-        a: "打 02-2833-5820 給我們，有真人接電話。我們可以幫你代訂，再告訴你匯款帳號，不用自己在網路上填資料。",
+        a: "用 LINE 問我們，有真人回訊息。我們可以幫你代訂，再告訴你匯款帳號，不用自己在網路上填資料。",
       },
       {
         q: "付完錢多久可以開始上課？",
-        a: "信用卡付款完成之後馬上就能看。ATM 匯款的話，我們對帳完成會寄一封開通信給你，通常一到兩個工作天。沒收到信先看看垃圾信件匣，還是沒有就打電話給我們。",
+        a: "信用卡付款完成之後馬上就能看。ATM 匯款的話，我們對帳完成會寄一封開通信給你，通常一到兩個工作天。沒收到信先看看垃圾信件匣，還是沒有就用 LINE 問我們。",
       },
     ],
   },
@@ -53,7 +53,7 @@ const GROUPS: { title: string; picks: string[]; extra: AccordionItem[] }[] = [
     extra: [
       {
         q: "工作坊額滿了，還可以報名嗎？",
-        a: "可以候補。額滿的場次按「已額滿・我要候補」留下電話，有人取消我們會照順序打給你。",
+        a: "可以候補。額滿的場次按「已額滿・我要候補」用 LINE 跟我們說一聲，有人取消我們會照順序通知你。",
       },
     ],
   },
@@ -81,26 +81,31 @@ export default function FaqPage() {
       <PageHero
         eyebrow="FAQ"
         title="常見問題"
-        lead="這裡整理了大家最常問的幾題。看完還是不確定的話，直接打電話給我們，不用客氣。"
+        lead="這裡整理了大家最常問的幾題。看完還是不確定的話，直接用 LINE 問我們，不用客氣。"
       />
 
-      {/* 找不到答案就打電話 */}
+      {/* 找不到答案就用 LINE 問 */}
       <section className="bg-white">
         <div className="mx-auto max-w-[860px] px-[20px] pt-[26px] md:px-[40px] md:pt-[40px]">
           <div className="rounded-card border border-sand-300 bg-cream-100 px-[22px] py-[24px] text-center md:px-[40px] md:py-[34px]">
-            <h2 className="t-h3">找不到答案，就打電話問</h2>
+            <h2 className="t-h3">找不到答案，就用 LINE 問</h2>
             <p className="t-body-sm mx-auto mt-[10px] max-w-[540px] text-pretty text-brown-500">
-              週一到週五 10:00–18:00 有真人接電話。不用先想好怎麼問，想到什麼就問什麼。
+              週一到週五 10:00–18:00 有真人回訊息。不用先想好怎麼問，想到什麼就問什麼。
             </p>
-            <LinkButton
-              href={SITE.phoneHref}
-              variant="outline"
-              size="lg"
-              fullWidth
-              className="mt-[18px] md:mt-[22px] md:w-auto"
+            <a
+              href={SITE.lineHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({
+                variant: "outline",
+                size: "lg",
+                fullWidth: true,
+                className: "mt-[18px] md:mt-[22px] md:w-auto",
+              })}
             >
-              打電話問 {SITE.phone}
-            </LinkButton>
+              用 LINE 問我們
+              <span className="sr-only">（會開啟 LINE）</span>
+            </a>
           </div>
         </div>
       </section>

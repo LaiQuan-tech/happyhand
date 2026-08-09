@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LinkButton } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { SITE } from "@/lib/site";
 import type { Product, ProductType } from "@/lib/content";
 import { CourseCard } from "./course-card";
@@ -83,21 +83,26 @@ export function CourseFilter({ products }: { products: Product[] }) {
           </p>
         ) : null}
 
-        {/* 每頁都要有的「打電話問」出口（設計稿 273–277） */}
+        {/* 每頁都要有的「用 LINE 問」出口（設計稿 273–277） */}
         <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-sand-400 bg-cream-100 p-[28px] text-center md:rounded-card md:p-[32px]">
           <h3 className="font-serif text-[19px] leading-[1.5] text-brown-900 md:text-[21px] md:leading-[1.55]">
             不確定從哪堂開始？
           </h3>
           <p className="mt-[10px] text-[17px] leading-[1.9] text-brown-500">
-            打給我們，有真人陪你挑。
+            用 LINE 問我們，有真人陪你挑。
           </p>
-          <LinkButton
-            href={SITE.phoneHref}
-            variant="outline"
-            className="mt-[16px]"
+          <a
+            href={SITE.lineHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass({
+              variant: "outline",
+              className: "mt-[16px]",
+            })}
           >
-            打電話問 {SITE.phone}
-          </LinkButton>
+            用 LINE 問我們
+            <span className="sr-only">（會開啟 LINE）</span>
+          </a>
         </div>
       </div>
     </section>

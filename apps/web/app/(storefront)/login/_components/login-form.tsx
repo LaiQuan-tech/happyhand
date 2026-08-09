@@ -193,12 +193,15 @@ export function LoginForm({
       </form>
 
       <p className="mt-[28px] text-center text-[16px] leading-[1.9] text-brown-500">
-        登入有問題嗎？打{" "}
+        登入有問題嗎？
         <a
-          href={SITE.phoneHref}
+          href={SITE.lineHref}
+          target="_blank"
+          rel="noopener noreferrer"
           className="-my-[7px] inline-block py-[11px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
         >
-          {SITE.phone}
+          用 LINE 問我們
+          <span className="sr-only">（會開啟 LINE）</span>
         </a>
       </p>
     </div>

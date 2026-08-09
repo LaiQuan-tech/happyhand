@@ -4,7 +4,7 @@ import { CheckoutView } from "@/app/(storefront)/checkout/_components/checkout-v
 export const metadata: Metadata = {
   title: "填寫資料與付款",
   description:
-    "填好姓名、手機與 Email，選一個方便的付款方式，就完成報名了。不方便自己操作可以打 02-2833-5820。",
+    "填好姓名、手機與 Email，選一個方便的付款方式，就完成報名了。不方便自己操作可以用 LINE 告訴我們。",
   robots: { index: false, follow: false },
 };
 

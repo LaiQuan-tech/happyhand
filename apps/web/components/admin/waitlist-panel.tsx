@@ -14,9 +14,9 @@ import { LoadError, WaitlistStatusChip } from "@/app/admin/sessions/ui";
 /**
  * 候補名單面板。
  *
- * 這是客服「接完電話手動登記」用的，不是使用者自助排隊 ——
- * 前台額滿時的 CTA 就是打電話（app/(storefront)/workshops/_components/session-row.tsx），
- * 客群 60–75 歲，打電話比填表單可靠（見 migration 20260810000004 的註解）。
+ * 這是客服「收到訊息後手動登記」用的，不是使用者自助排隊 ——
+ * 前台額滿時的 CTA 是開 LINE（app/(storefront)/workshops/_components/session-row.tsx），
+ * 客群 60–75 歲，用 LINE 講比填表單可靠（見 migration 20260810000004 的註解）。
  *
  * 刻意**沒有** "use client"：
  * 登記表單是原生 <form action={serverAction}>，沒有 JavaScript 也送得出去。
@@ -109,7 +109,7 @@ export function WaitlistPanel({
           items={entries}
           keyOf={(entry) => entry.id}
           caption="這一場的候補名單與處理狀態"
-          empty="還沒有人候補。客人打電話來時可以用下面的表單登記。"
+          empty="還沒有人候補。客人用 LINE 來問的時候，可以用下面的表單登記。"
           columns={[
             { header: "姓名", primary: true, cell: (entry) => entry.name },
             {

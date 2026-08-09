@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LinkButton } from "@/components/ui/button";
+import { LinkButton, buttonClass } from "@/components/ui/button";
 import { SITE, formatPrice } from "@/lib/site";
 import { timeRange, twDate, type WorkshopRow } from "@/lib/data";
 
@@ -11,7 +11,7 @@ import { timeRange, twDate, type WorkshopRow } from "@/lib/data";
  * 手機（<768px）：上下堆疊 — 日期方塊與標題同一行 → 地點時間 → 價格名額 → CTA 滿版，padding 20px。
  *
  * 額滿（剩餘 <= 0）時 CTA 換成 sand-400 底、文案「已額滿・我要候補」，
- * 仍是可以點的連結（撥打電話候補），不是 disabled。
+ * 仍是可以點的連結（用 LINE 登記候補），不是 disabled。
  */
 export function SessionRow({
   session,
@@ -113,15 +113,20 @@ export function SessionRow({
       {/* min-w 讓「已額滿・我要候補」與「我要報名」佔一樣寬的欄，各列價格才會對齊 */}
       <div className="mt-[14px] md:col-start-4 md:row-span-2 md:row-start-1 md:mt-0 md:flex md:min-w-[208px] md:justify-end">
         {soldOut ? (
-          <LinkButton
-            href={SITE.phoneHref}
-            variant="dark"
-            className="w-full whitespace-nowrap bg-sand-400! hover:bg-caramel-ink! md:w-auto"
+          <a
+            href={SITE.lineHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass({
+              variant: "dark",
+              className:
+                "w-full whitespace-nowrap bg-sand-400! hover:bg-caramel-ink! md:w-auto",
+            })}
           >
-            {/* 視覺文案與朗讀文案分開：畫面看得出額滿，語音直接說可以打電話候補 */}
+            {/* 視覺文案與朗讀文案分開：畫面看得出額滿，語音直接說可以用 LINE 候補 */}
             <span aria-hidden="true">已額滿・我要候補</span>
-            <span className="sr-only">已額滿，打電話候補</span>
-          </LinkButton>
+            <span className="sr-only">已額滿，用 LINE 登記候補（會開啟 LINE）</span>
+          </a>
         ) : (
           <LinkButton
             href={checkoutHref}

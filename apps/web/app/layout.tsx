@@ -40,6 +40,28 @@ export const metadata: Metadata = {
     type: "website",
     locale: "zh_TW",
     siteName: "快樂手",
+    // 這個客群主要靠 LINE 轉傳，沒有預覽圖的連結在 LINE 裡就是一行灰字
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "快樂手 Happy Healing Hands — 仁神術 JSJ 線上課程與台北實體工作坊",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "快樂手 Happy Healing Hands",
+    description:
+      "柳樺老師的仁神術（JSJ）練習。每天十分鐘，坐著也能做，有人陪著練。",
+    images: ["/og.png"],
+  },
+  icons: {
+    // favicon 不用寫：app/favicon.ico 走 Next 的檔案慣例會自動掛上，
+    // 這裡再寫一次會產生重複的 <link>。
+    // apple-touch-icon 在 public/ 底下，Next 不會自動掛，所以要明寫。
+    apple: "/apple-touch-icon.png",
   },
 };
 

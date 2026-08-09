@@ -63,8 +63,22 @@ export function LinkButton({
 }: LinkButtonProps) {
   const cls = buttonClass({ variant, size, fullWidth, className });
   if (href.startsWith("tel:") || href.startsWith("http") || href.startsWith("mailto:")) {
+    const isExternal = href.startsWith("http");
     return (
-      <a href={href} className={cls}>
+      /**
+       * ⚠️ 這個分支以前沒有轉發 ...rest，所以呼叫端寫 target="_blank" 會被
+       *    靜默吃掉——而且因為 props 型別是 Omit<ComponentProps<typeof Link>>，
+       *    TS 也不會報錯。現在轉發，並讓 http 連結預設就帶 target/rel
+       *    （呼叫端仍可覆寫）。
+       */
+      <a
+        href={href}
+        className={cls}
+        {...(isExternal
+          ? { target: "_blank", rel: "noopener noreferrer" }
+          : null)}
+        {...(rest as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+      >
         {children}
       </a>
     );

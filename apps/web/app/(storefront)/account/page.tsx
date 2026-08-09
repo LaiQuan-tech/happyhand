@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SITE } from "@/lib/site";
-import { LinkButton } from "@/components/ui/button";
+import { LinkButton, buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { PageHero } from "@/app/_components/page-hero";
 import { CallBand } from "@/app/_components/call-band";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "會員中心",
   description:
-    "登入之後可以看到你買過的線上課程、訂單和報名的工作坊。查詢訂單也可以直接打 02-2833-5820，我們幫你查。",
+    "登入之後可以看到你買過的線上課程、訂單和報名的工作坊。查詢訂單也可以直接用 LINE 問我們，我們幫你查。",
   robots: { index: false, follow: false },
 };
 
@@ -95,9 +95,8 @@ export default async function AccountPage() {
               </div>
 
               <p className="t-body-sm mt-[20px] rounded-card border border-sand-300 bg-cream-100 px-[22px] py-[18px] text-pretty text-brown-500 md:mt-[28px] md:px-[30px] md:py-[22px]">
-                這幾個頁面還在做，內容陸續補上。現在想查訂單或確認課程有沒有開通，打
-                {" "}
-                {SITE.phone} 給我們，我們幫你查。
+                這幾個頁面還在做，內容陸續補上。現在想查訂單或確認課程有沒有開通，用
+                LINE 問我們，我們幫你查。
               </p>
             </>
           ) : (
@@ -118,21 +117,25 @@ export default async function AccountPage() {
                 >
                   用 Email 登入
                 </LinkButton>
-                <LinkButton
-                  href={SITE.phoneHref}
-                  variant="outline"
-                  size="lg"
-                  fullWidth
-                  className="md:w-auto"
+                <a
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass({
+                    variant: "outline",
+                    size: "lg",
+                    fullWidth: true,
+                    className: "md:w-auto",
+                  })}
                 >
-                  打電話問 {SITE.phone}
-                </LinkButton>
+                  用 LINE 問我們
+                  <span className="sr-only">（會開啟 LINE）</span>
+                </a>
               </div>
 
               <p className="t-body-sm mt-[18px] text-pretty text-brown-500 md:mt-[22px]">
-                登入功能正在開通中，按下去暫時還是回到這一頁。開通之後我們會寄信通知你。在那之前，想確認買了什麼、課程有沒有開通，打
-                {" "}
-                {SITE.phone} 給我們，我們幫你查。
+                登入功能正在開通中，按下去暫時還是回到這一頁。開通之後我們會寄信通知你。在那之前，想確認買了什麼、課程有沒有開通，用
+                LINE 問我們，我們幫你查。
               </p>
             </div>
           )}
@@ -144,13 +147,13 @@ export default async function AccountPage() {
           <>
             登入不順利，
             <br className="md:hidden" />
-            打電話我們幫你查
+            用 LINE 說一聲我們幫你查
           </>
         }
         note="報上當初填的姓名或電話就可以，不用記訂單編號。"
       />
 
-      {/* 行動列左邊已經是「打電話問」，右邊再放一次會變成兩顆一樣的鈕 */}
+      {/* 行動列左邊已經是「用 LINE 問」，右邊再放一次會變成兩顆一樣的鈕 */}
       <MobileActionBar href="/courses" label="看線上課程" />
     </div>
   );

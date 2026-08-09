@@ -232,13 +232,16 @@ export function SiteHeader() {
 
             <div className="shrink-0 border-t border-sand-300 px-[20px] pt-[16px] pb-[calc(16px+env(safe-area-inset-bottom))]">
               <p className="mb-[8px] text-[15px] text-brown-500">
-                找不到要的東西？直接打給我們
+                找不到要的東西？直接用 LINE 問我們
               </p>
               <a
-                href={SITE.phoneHref}
+                href={SITE.lineHref}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex min-h-[56px] items-center justify-center rounded-pill bg-caramel-ink text-[18px] text-white"
               >
-                打電話問 {SITE.phone}
+                用 LINE 問我們
+                <span className="sr-only">（會開啟 LINE）</span>
               </a>
             </div>
           </div>

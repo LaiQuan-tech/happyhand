@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Figure } from "@/components/ui/placeholder";
-import { LinkButton, buttonClass } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { SITE } from "@/lib/site";
 import { getProduct, getWorkshopSessions, getPublishedSlugs } from "@/lib/data";
@@ -31,7 +31,7 @@ export async function generateMetadata({
     title: product.title,
     description:
       product.description ||
-      `${product.title}｜${product.subtitle}。想問哪一場適合你，打 ${SITE.phone}。`,
+      `${product.title}｜${product.subtitle}。想問哪一場適合你，加我們的 LINE ${SITE.lineId}。`,
     openGraph: {
       title: `${product.title}｜快樂手`,
       description: product.description,
@@ -119,13 +119,13 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
         <div className="mx-auto max-w-maxw">
           <h2 className="t-h2">場次與報名</h2>
           <p className="t-body-sm mt-[10px] text-brown-500">
-            {`選一個你方便的日子，按「我要報名」就可以了。不方便線上付款的話，打 ${SITE.phone} 我們幫你代訂。`}
+            {"選一個你方便的日子，按「我要報名」就可以了。不方便線上付款的話，用 LINE 問我們，我們幫你代訂。"}
           </p>
 
           <div className="mt-[20px]">
             {sessions.length === 0 ? (
               <NoSessions
-                message={`這門工作坊最近沒有安排場次，想知道下一場什麼時候開，打 ${SITE.phone} 問我們。`}
+                message="這門工作坊最近沒有安排場次，想知道下一場什麼時候開，用 LINE 問我們。"
               />
             ) : (
               <ul className="flex list-none flex-col gap-[14px]">
@@ -163,13 +163,18 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
                 看 Google 地圖
                 <span className="sr-only">（另開新視窗）</span>
               </a>
-              <LinkButton
-                href={SITE.phoneHref}
-                variant="outline"
-                className="w-full shrink-0 whitespace-nowrap md:w-auto"
+              <a
+                href={SITE.lineHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonClass({
+                  variant: "outline",
+                  className: "w-full shrink-0 whitespace-nowrap md:w-auto",
+                })}
               >
-                打電話問路 {SITE.phone}
-              </LinkButton>
+                用 LINE 問路
+                <span className="sr-only">（會開啟 LINE）</span>
+              </a>
             </div>
           </div>
 
@@ -179,9 +184,9 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
               {[
                 "工具跟講義我們都準備好了，你空手來就行。",
                 "開課前七天跟我們說一聲，可以改期一次。",
-                "額滿了還是可以打電話登記候補，有人取消我們會通知你。",
+                "額滿了還是可以用 LINE 登記候補，有人取消我們會通知你。",
                 "膝蓋、腰不舒服都可以坐著做，現場有助教會陪你。",
-                `其他不確定的事，打 ${SITE.phone} 問我們，我們慢慢跟你講。`,
+                "其他不確定的事，用 LINE 問我們，我們慢慢跟你講。",
               ].map((t) => (
                 <li
                   key={t}

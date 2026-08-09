@@ -1,5 +1,5 @@
 import { SITE } from "@/lib/site";
-import { LinkButton } from "@/components/ui/button";
+import { LinkButton, buttonClass } from "@/components/ui/button";
 
 /**
  * 手機固定行動列（README §4.1 #7）
@@ -8,34 +8,55 @@ import { LinkButton } from "@/components/ui/button";
 export function MobileActionBar({
   href = "/courses",
   label = "開始線上練習",
-  showPhone = true,
+  showLine = true,
 }: {
   href?: string;
   label?: string;
-  /** 主要動作本身就是撥號時設 false，否則會出現兩顆一樣的電話鈕 */
-  showPhone?: boolean;
+  /** 主要動作本身就是 LINE 時設 false，否則會出現兩顆一樣的 LINE 鈕 */
+  showLine?: boolean;
 }) {
+  // 主要動作也可能是 LINE（例如 /workshops）。外部連結一律走原生 <a>，
+  // 因為 LinkButton 對外部連結不會轉發 target/rel。
+  const external = href.startsWith("http");
+  const mainClass = showLine
+    ? "flex-[1.4] px-2 text-[17px]"
+    : "flex-1 px-2 text-[17px]";
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-sand-300 bg-white/96 px-[16px] pb-[calc(12px+env(safe-area-inset-bottom))] pt-[12px] backdrop-blur-sm md:hidden">
       <div className="flex gap-[10px]">
-        {showPhone && (
-          <LinkButton
-            href={SITE.phoneHref}
-            variant="outline"
-            className="flex-1 px-2 text-[17px]"
+        {showLine && (
+          <a
+            href={SITE.lineHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass({
+              variant: "outline",
+              className: "flex-1 px-2 text-[17px]",
+            })}
           >
-            打電話問
+            用 LINE 問
+            <span className="sr-only">（會開啟 LINE）</span>
+          </a>
+        )}
+        {external ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass({
+              variant: "primary",
+              className: mainClass,
+            })}
+          >
+            {label}
+            <span className="sr-only">（會開啟 LINE）</span>
+          </a>
+        ) : (
+          <LinkButton href={href} variant="primary" className={mainClass}>
+            {label}
           </LinkButton>
         )}
-        <LinkButton
-          href={href}
-          variant="primary"
-          className={
-            showPhone ? "flex-[1.4] px-2 text-[17px]" : "flex-1 px-2 text-[17px]"
-          }
-        >
-          {label}
-        </LinkButton>
       </div>
     </div>
   );

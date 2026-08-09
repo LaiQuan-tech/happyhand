@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * 1. 金額一律由伺服器端重算，不信任前端送來的 priceSnapshot。
  *    查得到商品就用商品表的價格；查不到才退回前端價格並標記 price_unverified。
  * 2. DB 還沒接好（沒有 SUPABASE_SERVICE_ROLE_KEY）或寫入失敗時，不回 500。
- *    照樣發訂單編號、回 persisted: false，讓使用者走完流程（完成頁會請他打電話確認），
+ *    照樣發訂單編號、回 persisted: false，讓使用者走完流程（完成頁會請他用 LINE 確認），
  *    server 端 console.error 留下完整內容當作補救依據。
  */
 
@@ -21,7 +21,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** 去掉念電話時會聽錯的字元（0/O、1/I/L、5/S、8/B、2/Z） */
+/** 去掉念出來或抄寫時會弄錯的字元（0/O、1/I/L、5/S、8/B、2/Z） */
 const ORDER_NO_ALPHABET = "ACDEFGHJKMNPQRTUVWXY346789";
 
 const PAYMENT_METHODS = new Set(["credit", "atm", "manual"]);
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     if (missing.length > 0) {
       return bad(
         `購物車裡有已經下架的課程（${missing.map((m) => m.title || m.slug).join("、")}），` +
-          `請回購物車移除，或打 ${SITE.phone} 我們幫你處理。`,
+          `請回購物車移除，或加我們的 LINE ${SITE.lineId}，我們幫你處理。`,
       );
     }
   }
@@ -281,17 +281,17 @@ async function checkSessionCapacity(
       const want = wanted.get(s.id) ?? 0;
 
       if (s.status === "cancelled") {
-        return `這一場工作坊已經取消了，請回工作坊頁面看看其他場次，或打 ${SITE.phone} 我們幫你安排。`;
+        return `這一場工作坊已經取消了，請回工作坊頁面看看其他場次，或加我們的 LINE ${SITE.lineId}，我們幫你安排。`;
       }
       if (s.status === "closed") {
-        return `這一場工作坊已經停止報名了，請打 ${SITE.phone} 我們幫你看看還有沒有位子。`;
+        return `這一場工作坊已經停止報名了，請加我們的 LINE ${SITE.lineId}，我們幫你看看還有沒有位子。`;
       }
 
       const available = s.capacity - s.seats_taken - (pending.get(s.id) ?? 0);
       if (want > available) {
         return available <= 0
-          ? `這一場工作坊的位子已經滿了。打 ${SITE.phone} 可以登記候補，有人取消我們會通知你。`
-          : `這一場工作坊只剩 ${available} 個位子，你選了 ${want} 個。請調整人數，或打 ${SITE.phone} 我們幫你想辦法。`;
+          ? `這一場工作坊的位子已經滿了。加我們的 LINE ${SITE.lineId} 可以登記候補，有人取消我們會通知你。`
+          : `這一場工作坊只剩 ${available} 個位子，你選了 ${want} 個。請調整人數，或加我們的 LINE ${SITE.lineId}，我們幫你想辦法。`;
       }
     }
 

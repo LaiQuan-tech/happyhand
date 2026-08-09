@@ -1,6 +1,6 @@
 "use client";
 
-import { LinkButton } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { SITE } from "@/lib/site";
 
 export type PaymentMethod = "credit" | "atm" | "manual";
@@ -25,8 +25,8 @@ const OPTIONS: Option[] = [
   },
   {
     value: "manual",
-    label: "LINE 或電話代訂",
-    desc: `送出後我們會打給你，${SITE.phone}`,
+    label: "LINE 代訂",
+    desc: "送出後我們會用 LINE 跟你聯絡",
   },
 ];
 
@@ -88,10 +88,10 @@ export function PaymentOptions({
                 </span>
               </label>
 
-              {/* 展開說明放在 label 外面：裡面有撥號按鈕，包進 label 會誤觸選取 */}
+              {/* 展開說明放在 label 外面：裡面有 LINE 按鈕，包進 label 會誤觸選取 */}
               {selected && opt.value === "credit" && (
                 <PanelBox>
-                  <p>{`線上刷卡還在開通中。你按下送出之後我們會先幫你保留名額，並打 ${SITE.phone} 跟你確認付款方式，這時候還不會扣款。`}</p>
+                  <p>{"線上刷卡還在開通中。你按下送出之後我們會先幫你保留名額，並用 LINE 跟你確認付款方式，這時候還不會扣款。"}</p>
                 </PanelBox>
               )}
 
@@ -100,7 +100,7 @@ export function PaymentOptions({
                   <p>
                     戶名：{SITE.company}
                     <br />
-                    銀行帳號請洽 {SITE.phone}，我們會直接告訴你，也可以幫你記下來。
+                    銀行帳號請用 LINE 問我們，我們會直接告訴你，也可以幫你記下來。
                   </p>
                   <p className="mt-[8px]">匯款後我們對帳完成就會開通。</p>
                 </PanelBox>
@@ -108,15 +108,20 @@ export function PaymentOptions({
 
               {selected && opt.value === "manual" && (
                 <PanelBox>
-                  <p>打 {SITE.phone} 給我們，我們幫你處理。</p>
-                  <LinkButton
-                    href={SITE.phoneHref}
-                    variant="dark"
-                    fullWidth
-                    className="mt-[14px]"
+                  <p>用 LINE 問我們，我們幫你處理。</p>
+                  <a
+                    href={SITE.lineHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={buttonClass({
+                      variant: "dark",
+                      fullWidth: true,
+                      className: "mt-[14px]",
+                    })}
                   >
-                    打 {SITE.phone}
-                  </LinkButton>
+                    加我們的 LINE
+                    <span className="sr-only">（會開啟 LINE）</span>
+                  </a>
                 </PanelBox>
               )}
             </div>

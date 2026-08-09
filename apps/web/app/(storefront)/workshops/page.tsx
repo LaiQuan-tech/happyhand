@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LinkButton } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { SITE } from "@/lib/site";
 import { getProducts, getWorkshopSessions } from "@/lib/data";
@@ -13,7 +13,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "工作坊場次",
   description:
-    "快樂手實體工作坊場次表。小班制，老師會一個一個看過去，工具跟講義都準備好了，空手來就行。想問哪一場適合你，打 02-2833-5820。",
+    "快樂手實體工作坊場次表。小班制，老師會一個一個看過去，工具跟講義都準備好了，空手來就行。想問哪一場適合你，加我們的 LINE @hao2082l。",
 };
 
 /**
@@ -43,11 +43,17 @@ export default async function WorkshopsPage() {
           <p className="t-body-lg text-brown-500">
             小班制，八到十個人，老師會一個一個看過去。工具跟講義都準備好了，你空手來就行。
           </p>
-          {/* 桌機沒有底部行動列，這裡補一個打電話的出口 */}
+          {/* 桌機沒有底部行動列，這裡補一個用 LINE 問的出口 */}
           <div className="hidden w-full pt-[8px] md:block md:w-auto">
-            <LinkButton href={SITE.phoneHref} variant="outline">
-              打電話問場次 {SITE.phone}
-            </LinkButton>
+            <a
+              href={SITE.lineHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({ variant: "outline" })}
+            >
+              用 LINE 問場次
+              <span className="sr-only">（會開啟 LINE）</span>
+            </a>
           </div>
         </div>
       </section>
@@ -83,13 +89,18 @@ export default async function WorkshopsPage() {
                 滿 6 人可以另外安排包班，地點時間都能談。
               </p>
             </div>
-            <LinkButton
-              href={SITE.phoneHref}
-              variant="outline"
-              className="w-full whitespace-nowrap md:w-auto"
+            <a
+              href={SITE.lineHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({
+                variant: "outline",
+                className: "w-full whitespace-nowrap md:w-auto",
+              })}
             >
               問包班
-            </LinkButton>
+              <span className="sr-only">（會開啟 LINE）</span>
+            </a>
           </div>
 
           <p className="mt-[24px] t-caption text-brown-300">
@@ -98,11 +109,11 @@ export default async function WorkshopsPage() {
         </div>
       </section>
 
-      {/* 主要動作就是撥號，關掉左邊的電話鈕改成單顆滿版，長輩更好按 */}
+      {/* 主要動作就是開 LINE，關掉左邊的 LINE 鈕改成單顆滿版，長輩更好按 */}
       <MobileActionBar
-        href={SITE.phoneHref}
-        label={`打電話報名 ${SITE.phone}`}
-        showPhone={false}
+        href={SITE.lineHref}
+        label="用 LINE 報名"
+        showLine={false}
       />
     </div>
   );
