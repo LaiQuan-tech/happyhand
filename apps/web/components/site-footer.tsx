@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { SITE, NAV_LINKS } from "@/lib/site";
 
 export function SiteFooter() {
@@ -6,10 +7,15 @@ export function SiteFooter() {
     <footer className="border-t border-sand-300 bg-white">
       <div className="mx-auto grid max-w-maxw gap-[28px] px-[20px] py-[40px] md:grid-cols-[1.2fr_1fr_1fr] md:px-[40px] md:py-[56px]">
         <div>
-          <div className="font-serif text-[22px] font-bold tracking-[0.14em] text-caramel-ink">
-            {SITE.brandZh}
-          </div>
-          <div className="t-micro mt-2 tracking-[0.14em] text-brown-300">
+          <Image
+            src="/logo-wordmark.png"
+            alt={SITE.brandZh}
+            width={695}
+            height={280}
+            sizes="90px"
+            className="h-[30px] w-auto"
+          />
+          <div className="t-micro mt-[10px] tracking-[0.14em] text-brown-300">
             {SITE.brandEn}
           </div>
           <p className="t-body-sm mt-[16px] text-brown-500">

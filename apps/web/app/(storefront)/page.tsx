@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { LinkButton } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { MobileActionBar } from "@/components/mobile-action-bar";
@@ -73,10 +74,15 @@ export default async function HomePage() {
           className="halo-bg pointer-events-none absolute top-[10px] left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full md:top-[30px] md:h-[660px] md:w-[660px]"
         />
         <div className="relative mx-auto max-w-maxw">
-          <Figure
-            rounded="rounded-full"
-            label="雙手 logo"
-            alt="快樂手雙手 logo"
+          {/* 品牌標記。logo-mark.png 是去背過的墨圈，四周留了 6% 白邊，
+              所以不會被 rounded-full 切到外緣。 */}
+          <Image
+            src="/logo-mark.png"
+            alt="快樂手 Happy Healing Hands"
+            width={691}
+            height={691}
+            priority
+            sizes="(min-width: 768px) 210px, 140px"
             className="mx-auto h-[140px] w-[140px] md:h-[210px] md:w-[210px]"
           />
           <h1 id="hero-title" className="t-h1 pt-[26px] md:pt-[38px]">
