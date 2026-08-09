@@ -7,6 +7,7 @@ import { formatTaipei } from "@/components/admin/datetime-field";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { RoleSelect } from "@/components/admin/role-select";
 import { loadStaffPage, type StaffMember, type StaffPageData } from "./queries";
+import { INVITE_FEEDBACK, type InviteCode } from "./rules";
 import { inviteStaff, revokeInvite, setStaffRole, removeStaff } from "./actions";
 import { Callout, Chip, PermissionDenied, RoleChip, RoleLegend, Section } from "./ui";
 
@@ -29,54 +30,6 @@ import { Callout, Chip, PermissionDenied, RoleChip, RoleLegend, Section } from "
 
 export const dynamic = "force-dynamic";
 
-type InviteFeedback = {
-  tone: "ok" | "warn" | "danger";
-  title: string;
-  body?: string;
-};
-
-const INVITE_FEEDBACK: Record<string, InviteFeedback> = {
-  ok: {
-    tone: "ok",
-    title: "邀請已建立。",
-    body:
-      "請他用這個信箱到登入頁自行註冊，註冊完成的當下就會自動變成你指定的角色，" +
-      "邀請也會同時被消耗掉。你不需要再做任何事。",
-  },
-  exists: {
-    tone: "warn",
-    title: "這個信箱已經有帳號了，請直接改他的角色。",
-    body:
-      "邀請只對「還沒註冊」的信箱有效 —— 已經有帳號的人不會再觸發一次註冊流程，" +
-      "那封邀請會永遠躺在名單裡不生效。這個帳號已經列在下面，直接改他的角色就行。",
-  },
-  duplicate: {
-    tone: "warn",
-    title: "這個信箱已經在待接受的邀請名單裡了。",
-    body: "要換角色的話，請先撤銷原本那封邀請，再重新邀請一次。",
-  },
-  empty: { tone: "danger", title: "請填寫 Email。" },
-  invalid: {
-    tone: "danger",
-    title: "這不是有效的 Email 格式。",
-    body: "只接受一般的英數字信箱（例如 someone@example.com），不支援含中文或全形字元的位址。",
-  },
-  badrole: { tone: "danger", title: "請選擇一個角色（客服／內容編輯／負責人）。" },
-  unverified: {
-    tone: "danger",
-    title: "沒辦法確認這個信箱是不是已經註冊過，因此沒有建立邀請。",
-    body:
-      "為了不做出一封永遠不會生效、也不會報錯的死邀請，這次刻意不寫入。" +
-      "請稍後重試；若持續失敗請截圖回報。",
-  },
-  denied: { tone: "danger", title: "你的帳號沒有管理員工的權限。" },
-  failed: {
-    tone: "danger",
-    title: "建立邀請失敗，請重試一次。",
-    body: "詳細錯誤已記在伺服器 log。若持續失敗請截圖回報。",
-  },
-};
-
 export default async function AdminStaffPage({
   searchParams,
 }: {
@@ -96,7 +49,12 @@ export default async function AdminStaffPage({
   }
 
   const params = await searchParams;
-  const feedback = params.invite ? INVITE_FEEDBACK[params.invite] : undefined;
+  // 代碼是使用者可以自己在網址列亂打的，用 in 檢查而不是直接索引，
+  // 否則 ?invite=__proto__ 之類的輸入會拿到一個不是 InviteFeedback 的東西。
+  const feedback =
+    params.invite && Object.prototype.hasOwnProperty.call(INVITE_FEEDBACK, params.invite)
+      ? INVITE_FEEDBACK[params.invite as InviteCode]
+      : undefined;
 
   let data: StaffPageData | null = null;
   let fatal: string | null = null;

@@ -5,21 +5,15 @@ import { redirect } from "next/navigation";
 import { requireCapability, adminErrorMessage, AdminAuthError } from "@/lib/admin/guard";
 import { writeAudit } from "@/lib/admin/audit";
 import { createServiceClient } from "@/lib/supabase/server";
+import { ROLE_LABELS, toRole, type Role } from "@/lib/admin/roles";
+import { loadUserEmailIndex, type Db } from "./queries";
 import {
-  ROLES,
-  STAFF_ROLES,
-  ROLE_LABELS,
-  toRole,
-  type Role,
-  type StaffRole,
-} from "@/lib/admin/roles";
-import {
-  loadUserEmailIndex,
-  normalizeEmail,
-  isValidEmail,
+  demotesOwner,
+  validateInviteInput,
+  vetoAfterRead,
+  vetoBeforeRead,
   UUID_PATTERN,
-  type Db,
-} from "./queries";
+} from "./rules";
 
 /**
  * 員工管理的寫入動作。
@@ -43,14 +37,6 @@ export type ActionResult = { error?: string | null } | undefined;
 const STAFF_PATH = "/admin/staff";
 
 /* -------------------------------------------------------------- 共用檢查 */
-
-function isRole(value: string): value is Role {
-  return (ROLES as readonly string[]).includes(value);
-}
-
-function isStaffInviteRole(value: string): value is StaffRole {
-  return (STAFF_ROLES as readonly string[]).includes(value);
-}
 
 /** 目前有幾位負責人。查詢失敗回 null —— 呼叫端必須把 null 當「不確定」而不是 0。 */
 async function countOwners(db: Db): Promise<number | null> {
@@ -82,23 +68,14 @@ async function changeRole(
   try {
     const staff = await requireCapability("staff:manage");
 
-    if (!UUID_PATTERN.test(userId)) {
-      return { error: "帳號代號格式不對，請重新整理後再試。" };
-    }
-    if (!isRole(next)) {
-      // 刻意不用 toRole()：它認不得的值一律當 customer，
-      // 打錯字的角色名稱會靜默變成「把人降級」。
-      return { error: "不認得的角色，請重新整理後再試。" };
-    }
-
-    // 🔴 保護 1：不能改自己。
-    // 放在最前面（連 DB 都不用查）：這是最常見也最容易一鍵鎖死自己的操作。
-    if (userId === staff.id) {
-      return {
-        error:
-          "不能修改自己的角色。要把自己降級請先請另一位負責人操作，避免把自己鎖在後台外面。",
-      };
-    }
+    // 🔴 保護 1（不能改自己）與格式檢查。判斷本體在 ./rules.ts，
+    //    連資料庫都不用查 —— 這是最常見也最容易一鍵鎖死自己的操作。
+    const earlyVeto = vetoBeforeRead({
+      actorId: staff.id,
+      targetId: userId,
+      next,
+    });
+    if (earlyVeto) return earlyVeto;
 
     const db = createServiceClient();
 
@@ -115,25 +92,14 @@ async function changeRole(
     if (!before) return { error: "找不到這個帳號，可能已經被刪除。" };
 
     const current = toRole((before as unknown as { role: string | null }).role);
-    if (current === next) {
-      return { error: `他已經是「${ROLE_LABELS[next]}」了。` };
-    }
 
     // 🔴 保護 2：不能移除最後一位負責人。
-    const demotingOwner = current === "owner" && next !== "owner";
-    if (demotingOwner) {
-      const owners = await countOwners(db);
-      if (owners === null) {
-        // 數不出來就不動。寧可讓人重試，也不要在不知道剩幾位負責人的情況下降級。
-        return { error: "無法確認目前的負責人數，為了安全起見這次不做變更，請重試一次。" };
-      }
-      if (owners <= 1) {
-        return {
-          error:
-            "系統至少要保留一位負責人。這是目前唯一的負責人，請先把另一個帳號設成負責人，再回來調整他。",
-        };
-      }
-    }
+    // 只有真的要把負責人降級時才多查一次人數，其他變更不必付這個成本。
+    const demotingOwner = demotesOwner(current, next);
+    const owners = demotingOwner ? await countOwners(db) : null;
+
+    const veto = vetoAfterRead({ current, next, ownerCount: owners });
+    if (veto) return veto;
 
     // 帶上 .eq("role", current)：上面的檢查是拿「幾毫秒前讀到的角色」判的。
     // 沒有這個條件，兩個負責人同時操作時慢的那個會把快的那個蓋掉，
@@ -265,16 +231,18 @@ export async function inviteStaff(formData: FormData): Promise<void> {
   try {
     const staff = await requireCapability("staff:manage");
 
-    const email = normalizeEmail(String(formData.get("email") ?? ""));
-    const roleRaw = String(formData.get("role") ?? "").trim();
+    // email 在這裡就被 lower(trim()) 正規化了。少了這一步，`Big@Case.COM `
+    // 會直接撞上 staff_invites_email_normalized 這條 check constraint（23514），
+    // 使用者拿到的是一句英文的 Postgres 錯誤。
+    const parsed = validateInviteInput(
+      String(formData.get("email") ?? ""),
+      String(formData.get("role") ?? ""),
+    );
 
-    if (!email) {
-      query = "invite=empty";
-    } else if (!isValidEmail(email)) {
-      query = "invite=invalid";
-    } else if (!isStaffInviteRole(roleRaw)) {
-      query = "invite=badrole";
+    if ("code" in parsed) {
+      query = `invite=${parsed.code}`;
     } else {
+      const { email, role } = parsed;
       const db = createServiceClient();
 
       // 🔴 保護 3：已經註冊的信箱不能用邀請。
@@ -303,7 +271,7 @@ export async function inviteStaff(formData: FormData): Promise<void> {
         } else {
           const { data, error } = await db
             .from("staff_invites")
-            .insert({ email, role: roleRaw, invited_by: staff.id })
+            .insert({ email, role, invited_by: staff.id })
             .select("id")
             .maybeSingle();
 
@@ -328,8 +296,8 @@ export async function inviteStaff(formData: FormData): Promise<void> {
               entityId: (data as unknown as { id: string } | null)?.id ?? null,
               // 邀請的 Email 就是這筆稽核的重點，這裡刻意記下來：
               // 「誰在什麼時候把後台權限發給了哪個信箱」是稽核最該回答的問題。
-              summary: `邀請 ${email} 成為「${ROLE_LABELS[roleRaw]}」`,
-              diff: { email, role: roleRaw },
+              summary: `邀請 ${email} 成為「${ROLE_LABELS[role]}」`,
+              diff: { email, role },
             });
             revalidatePath(STAFF_PATH);
           }

@@ -1,6 +1,7 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/server";
 import { toRole, type Role } from "@/lib/admin/roles";
+import { normalizeEmail, UUID_PATTERN } from "./rules";
 
 /**
  * 員工頁的讀取層。
@@ -55,37 +56,11 @@ export type UserEmailIndex = {
 
 /* --------------------------------------------------------------- 純函式 */
 
-/**
- * 對齊 staff_invites 的 check constraint：`email = lower(trim(email))`。
- *
- * 順序必須是「先 trim 再 lower」，跟 Postgres 的 lower(trim(x)) 一致。
- * JS 的 trim() 比 Postgres 的 trim()（只去空白字元 ' '）更兇，會連 \t \n
- * 一起去掉 —— 這個方向是安全的：JS 產出的字串套進 DB 的 check 仍然成立。
- */
-export function normalizeEmail(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-/**
- * 保守的 Email 格式檢查，刻意只收 ASCII。
- *
- * 不是為了擋人，是為了讓 JS 的 toLowerCase() 與 Postgres 的 lower() 保證一致：
- * 含有 'İ' 這類字元時兩邊的 lower 結果可能不同，那會做出一封
- * handle_new_user() 永遠比對不到的死邀請 —— 而且完全沒有錯誤訊息。
- * 直接在入口把非 ASCII 擋掉，比事後解釋「為什麼他註冊了卻沒變成員工」便宜。
- */
-const EMAIL_PATTERN = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
-
-export function isValidEmail(normalized: string): boolean {
-  // 254 是 RFC 5321 的信封位址長度上限
-  return normalized.length > 0 && normalized.length <= 254 && EMAIL_PATTERN.test(normalized);
-}
+// normalizeEmail / isValidEmail / UUID_PATTERN 住在 ./rules.ts。
+// 那個檔案不 import server-only，所以驗收腳本可以直接跑它們本人。
 
 /** owner 排前面，其次 editor / support，同角色再依加入時間 */
 const ROLE_RANK: Record<Role, number> = { owner: 0, editor: 1, support: 2, customer: 3 };
-
-export const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /* ------------------------------------------------------------ email 索引 */
 

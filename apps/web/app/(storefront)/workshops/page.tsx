@@ -6,6 +6,10 @@ import { getProducts, getWorkshopSessions } from "@/lib/data";
 import { SessionRow } from "./_components/session-row";
 import { NoSessions } from "./_components/no-sessions";
 
+/** 與 /courses 一致的 ISR 週期。後台改動仍靠 revalidatePath 立即生效，
+ *  這個值只是「就算沒人呼叫 revalidate，最久也就過期五分鐘」的保底。 */
+export const revalidate = 300;
+
 export const metadata: Metadata = {
   title: "工作坊場次",
   description:
