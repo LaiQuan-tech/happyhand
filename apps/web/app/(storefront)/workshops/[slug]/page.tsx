@@ -5,17 +5,18 @@ import { Figure } from "@/components/ui/placeholder";
 import { LinkButton, buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { SITE } from "@/lib/site";
-import { PRODUCTS } from "@/lib/content";
-import { getProduct, getWorkshopSessions } from "@/lib/data";
+import { getProduct, getWorkshopSessions, getPublishedSlugs } from "@/lib/data";
 import { SessionRow } from "../_components/session-row";
 import { NoSessions } from "../_components/no-sessions";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
-export function generateStaticParams() {
-  return PRODUCTS.filter((p) => p.type === "workshop").map((p) => ({
-    slug: p.slug,
-  }));
+export const revalidate = 300;
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  const slugs = await getPublishedSlugs("workshop");
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({

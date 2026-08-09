@@ -3,7 +3,8 @@ import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { MobileActionBar } from "@/components/mobile-action-bar";
-import { PRODUCTS, REASONS, TEACHER } from "@/lib/content";
+import { REASONS, TEACHER } from "@/lib/content";
+import { getProducts } from "@/lib/data";
 import { SITE, formatPrice } from "@/lib/site";
 
 /**
@@ -20,26 +21,46 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-/** 首頁精選課程：順序與主推卡依設計稿；中間那張手機不顯示（設計稿手機只放兩張） */
+/**
+ * 首頁課程卡改成 5 分鐘一次的 ISR：後台改了課程最多五分鐘就會反映，
+ * 而頁面仍然是靜態產出（不是每個請求都打資料庫）。
+ */
+export const revalidate = 300;
+
+/**
+ * 首頁精選課程的順序依設計稿；中間那張手機不顯示（設計稿手機只放兩張）。
+ * 順序是設計決定所以留在程式碼裡，但「有哪些課、叫什麼、賣多少」一律讀資料庫。
+ * 名單裡的課若被下架就自動跳過，再用 is_featured / sort_order 補到三張。
+ */
 const HOME_COURSE_SLUGS: { slug: string; hideOnMobile?: boolean }[] = [
   { slug: "self-help-book-28-lessons" },
   { slug: "jsj-beginner", hideOnMobile: true },
   { slug: "main-central-flow" },
 ];
 
-const COURSES = PRODUCTS.filter((p) => p.type === "course");
-
-const HOME_COURSES = HOME_COURSE_SLUGS.flatMap(({ slug, hideOnMobile }) => {
-  const product = COURSES.find((p) => p.slug === slug);
-  return product ? [{ product, hideOnMobile: Boolean(hideOnMobile) }] : [];
-});
-
 /** footerLine 內的電話要能直接撥打，把字串切成「前段 / 電話 / 後段」 */
 const [footerLineBeforePhone, footerLineAfterPhone] = SITE.footerLine.split(
   SITE.phone,
 );
 
-export default function HomePage() {
+export default async function HomePage() {
+  const all = await getProducts();
+  const courses = all.filter((p) => p.type === "course");
+
+  const picked = HOME_COURSE_SLUGS.flatMap(({ slug, hideOnMobile }) => {
+    const product = courses.find((p) => p.slug === slug);
+    return product ? [{ product, hideOnMobile: Boolean(hideOnMobile) }] : [];
+  });
+
+  // 指定的課被下架時補上精選課，湊滿三張；補進來的一律顯示（不隱藏）
+  const filler = courses
+    .filter((p) => !picked.some((x) => x.product.slug === p.slug))
+    .sort((a, b) => Number(b.featured) - Number(a.featured))
+    .slice(0, Math.max(0, 3 - picked.length))
+    .map((product) => ({ product, hideOnMobile: false }));
+
+  const HOME_COURSES = [...picked, ...filler];
+
   return (
     <div className="pb-action-bar">
       {/* ── 1. Hero ── 設計稿 L41–54（桌機）／L135–146（手機） */}
@@ -112,7 +133,10 @@ export default function HomePage() {
         </ul>
       </section>
 
-      {/* ── 3. 課程卡 ── 設計稿 L74–105（桌機）／L164–184（手機） */}
+      {/* ── 3. 課程卡 ── 設計稿 L74–105（桌機）／L164–184（手機）
+          一門課都沒有時整段不渲染：留一個「從哪一堂開始都可以」配空白格
+          比直接不出現還糟。 */}
+      {HOME_COURSES.length > 0 && (
       <section
         aria-labelledby="courses-title"
         className="bg-cream-100 px-[20px] pt-[40px] pb-[96px] md:px-[40px] md:py-[76px]"
@@ -177,6 +201,7 @@ export default function HomePage() {
           </ul>
         </div>
       </section>
+      )}
 
       {/* ── 4. 老師 ── 設計稿 L107–118（桌機；手機稿未收錄本區，改上下堆疊） */}
       <section

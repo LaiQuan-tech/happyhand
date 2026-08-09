@@ -1,16 +1,22 @@
 import "server-only";
-import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
-import {
-  PRODUCTS,
-  WORKSHOP_SESSIONS,
-  type Product,
-  type WorkshopSession,
-} from "@/lib/content";
+import { createPublicClient, hasSupabaseEnv } from "@/lib/supabase/server";
+import type { Product, WorkshopSession } from "@/lib/content";
 
 /**
- * 資料讀取層。
- * 優先讀 Supabase；DB 尚未就緒或查詢失敗時 fallback 回 lib/content.ts 的靜態資料，
- * 讓頁面永遠有東西可以顯示（避免部署當下 DB 還沒 seed 就整站空白）。
+ * 資料讀取層。資料庫是唯一真相。
+ *
+ * ⚠️ 這裡刻意「不」在查無資料時退回 lib/content.ts 的靜態資料。
+ *    有後台之後，那種 fallback 會變成 bug 而不是保險：
+ *    後台把課程全部下架 → data.length === 0 → 舊版會回靜態的 6 門課，
+ *    等於下架不生效，而且沒有任何錯誤訊息。刪掉單元、清空 tags 同理。
+ *
+ *    區分兩種情況：
+ *      查得到但零筆 → 就是空的，老實回空陣列，讓頁面顯示空狀態
+ *      連不上 / 查詢出錯 → console.error 後回空，並靠 ISR 的舊快取撐著
+ *                          （Next 在 revalidate 失敗時會沿用上一次成功的版本，
+ *                            那是真實的上一版，不是永遠停在某個時間點的假資料）
+ *
+ * 用 createPublicClient()（不讀 cookie）讓這些頁面能維持靜態 + ISR。
  */
 
 export type ProductWithSessions = Product & {
@@ -18,58 +24,94 @@ export type ProductWithSessions = Product & {
   sessions?: (WorkshopSession & { id?: string; status?: string })[];
 };
 
+type LessonRow = {
+  title: string;
+  duration_sec: number;
+  free_preview: boolean;
+  sort_order?: number;
+};
+
+const PRODUCT_SELECT =
+  "id, slug, type, title, subtitle, description, price, compare_at_price, cover_url, is_featured, tags, benefits, sort_order";
+
 export async function getProducts(): Promise<ProductWithSessions[]> {
-  if (!hasSupabaseEnv()) return PRODUCTS;
+  if (!hasSupabaseEnv()) return [];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select("*")
+      // 一併撈單元：舊版的 mapProduct() 寫死 lessons 取自靜態檔，
+      // 導致列表頁的「共 N 堂」永遠不受資料庫控制。
+      .select(`${PRODUCT_SELECT}, course_lessons(title, duration_sec, free_preview, sort_order)`)
       .eq("is_published", true)
       .order("sort_order", { ascending: true });
-    if (error || !data?.length) return PRODUCTS;
-    return data.map(mapProduct);
-  } catch {
-    return PRODUCTS;
+
+    if (error) {
+      console.error("[data] getProducts 失敗", error.message);
+      return [];
+    }
+    return (data ?? []).map(mapProduct);
+  } catch (err) {
+    console.error("[data] getProducts 例外", err);
+    return [];
   }
 }
 
 export async function getProduct(
   slug: string,
 ): Promise<ProductWithSessions | null> {
-  const fallback = PRODUCTS.find((p) => p.slug === slug) ?? null;
-  if (!hasSupabaseEnv()) return fallback;
+  if (!hasSupabaseEnv()) return null;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
-      .select("*, course_lessons(*), workshop_sessions(*)")
+      .select(
+        `${PRODUCT_SELECT}, course_lessons(title, duration_sec, free_preview, sort_order), workshop_sessions(*)`,
+      )
       .eq("slug", slug)
       .eq("is_published", true)
       .maybeSingle();
-    if (error || !data) return fallback;
-    const mapped = mapProduct(data);
-    const lessons = (data.course_lessons ?? [])
-      .slice()
-      .sort(
-        (a: { sort_order?: number }, b: { sort_order?: number }) =>
-          (a.sort_order ?? 0) - (b.sort_order ?? 0),
-      )
-      .map((l: { title: string; duration_sec: number; free_preview: boolean }) => ({
-        title: l.title,
-        duration_sec: l.duration_sec,
-        free_preview: l.free_preview,
-      }));
+
+    if (error) {
+      console.error("[data] getProduct 失敗", slug, error.message);
+      return null;
+    }
+    if (!data) return null;
+
     return {
-      ...mapped,
-      lessons: lessons.length ? lessons : fallback?.lessons,
-      sessions: (data.workshop_sessions ?? []).sort(
-        (a: { starts_at: string }, b: { starts_at: string }) =>
+      ...mapProduct(data),
+      sessions: (data.workshop_sessions ?? [])
+        .slice()
+        .sort((a: { starts_at: string }, b: { starts_at: string }) =>
           a.starts_at.localeCompare(b.starts_at),
-      ),
+        ),
     };
-  } catch {
-    return fallback;
+  } catch (err) {
+    console.error("[data] getProduct 例外", slug, err);
+    return null;
+  }
+}
+
+/** 給 generateStaticParams 用：只要 slug，不需要整包資料 */
+export async function getPublishedSlugs(
+  type?: Product["type"],
+): Promise<string[]> {
+  if (!hasSupabaseEnv()) return [];
+  try {
+    const supabase = createPublicClient();
+    let q = supabase.from("products").select("slug").eq("is_published", true);
+    if (type) q = q.eq("type", type);
+    const { data, error } = await q;
+    if (error) {
+      console.error("[data] getPublishedSlugs 失敗", error.message);
+      return [];
+    }
+    return (data ?? []).map((r: { slug: string }) => r.slug);
+  } catch (err) {
+    // build 當下連不到資料庫時回空陣列：所有詳情頁改成 on-demand 渲染，
+    // 站還是活的。回空陣列不是假資料，跟靜態 fallback 性質完全不同。
+    console.error("[data] getPublishedSlugs 例外", err);
+    return [];
   }
 }
 
@@ -88,33 +130,21 @@ export type WorkshopRow = {
 };
 
 export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
-  const fallback: WorkshopRow[] = WORKSHOP_SESSIONS.map((s) => {
-    const p = PRODUCTS.find((x) => x.slug === s.slug)!;
-    return {
-      slug: s.slug,
-      title: p.title,
-      subtitle: p.subtitle,
-      price: p.price,
-      starts_at: s.starts_at,
-      ends_at: s.ends_at,
-      location: s.location,
-      address: s.address,
-      capacity: s.capacity,
-      seats_taken: s.seats_taken,
-    };
-  }).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-
-  if (!hasSupabaseEnv()) return fallback;
+  if (!hasSupabaseEnv()) return [];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("workshop_sessions")
       .select("*, products!inner(slug,title,subtitle,price,is_published)")
       .eq("products.is_published", true)
       .in("status", ["open", "full"])
       .order("starts_at", { ascending: true });
-    if (error || !data?.length) return fallback;
-    return data.map((s) => ({
+
+    if (error) {
+      console.error("[data] getWorkshopSessions 失敗", error.message);
+      return [];
+    }
+    return (data ?? []).map((s) => ({
       id: s.id,
       slug: s.products.slug,
       title: s.products.title,
@@ -127,13 +157,22 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
       capacity: s.capacity,
       seats_taken: s.seats_taken,
     }));
-  } catch {
-    return fallback;
+  } catch (err) {
+    console.error("[data] getWorkshopSessions 例外", err);
+    return [];
   }
 }
 
 function mapProduct(row: Record<string, unknown>): ProductWithSessions {
-  const fb = PRODUCTS.find((p) => p.slug === row.slug);
+  const lessons = ((row.course_lessons as LessonRow[] | null) ?? [])
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((l) => ({
+      title: l.title,
+      duration_sec: l.duration_sec,
+      free_preview: l.free_preview,
+    }));
+
   return {
     id: row.id as string | undefined,
     slug: row.slug as string,
@@ -143,11 +182,13 @@ function mapProduct(row: Record<string, unknown>): ProductWithSessions {
     description: (row.description as string) ?? "",
     price: row.price as number,
     compare_at_price: (row.compare_at_price as number | null) ?? null,
-    featured: (row.is_featured as boolean) ?? fb?.featured ?? false,
-    tags: (row.tags as string[]) ?? fb?.tags ?? [],
-    benefits: (row.benefits as string[]) ?? fb?.benefits ?? [],
+    // 這幾個欄位在 DB 是 not null default，舊版的 ?? 靜態值只會讓
+    // 「後台清空 tags」這種操作靜默失效。
+    featured: (row.is_featured as boolean) ?? false,
+    tags: (row.tags as string[]) ?? [],
+    benefits: (row.benefits as string[]) ?? [],
     cover_url: (row.cover_url as string | null) ?? null,
-    lessons: fb?.lessons,
+    lessons: lessons.length ? lessons : undefined,
   };
 }
 

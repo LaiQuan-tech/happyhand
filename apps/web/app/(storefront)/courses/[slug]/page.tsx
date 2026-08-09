@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct } from "@/lib/data";
-import { PRODUCTS, TEACHER, FAQS } from "@/lib/content";
+import { getProduct, getPublishedSlugs } from "@/lib/data";
+import { TEACHER, FAQS } from "@/lib/content";
 import { SITE, formatPrice } from "@/lib/site";
 import { Figure } from "@/components/ui/placeholder";
 import { Accordion } from "@/components/ui/accordion";
@@ -12,8 +12,17 @@ import { AddToCartButton } from "../_components/add-to-cart-button";
 import { CourseBuyBar } from "../_components/course-buy-bar";
 import { formatTotalDuration } from "../_components/format";
 
-export function generateStaticParams() {
-  return PRODUCTS.map((p) => ({ slug: p.slug }));
+export const revalidate = 300;
+
+/**
+ * 明寫出來當文件：後台新增的課程在下一次 revalidate 之前會走 on-demand 渲染，
+ * 不會因為不在這份清單裡就 404。
+ */
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  const slugs = await getPublishedSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({

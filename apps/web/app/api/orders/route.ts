@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { PRODUCTS } from "@/lib/content";
+import { SITE } from "@/lib/site";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,6 +123,20 @@ export async function POST(request: Request) {
     parsed.map((i) => i.slug).filter(Boolean),
   );
 
+  // 資料庫連得上、卻查不到購物車裡的商品 → 那些商品已經下架或被刪掉了。
+  // 這時候寧可拒單也不要用前端送來的價格成交（那是使用者可以改的）。
+  // supabase 為 null 是「完全沒設定環境變數」的降級模式，走原本的
+  // price_unverified 路徑，不在這裡擋。
+  if (supabase) {
+    const missing = parsed.filter((it) => !priceBook.has(it.slug));
+    if (missing.length > 0) {
+      return bad(
+        `購物車裡有已經下架的課程（${missing.map((m) => m.title || m.slug).join("、")}），` +
+          `請回購物車移除，或打 ${SITE.phone} 我們幫你處理。`,
+      );
+    }
+  }
+
   const lines: Line[] = parsed.map((it) => {
     const known = priceBook.get(it.slug);
     const fallback =
@@ -197,16 +211,17 @@ function getServiceClient() {
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
- * 商品價格表。先鋪 lib/content.ts 的靜態價格（同時也是 seed 來源），
- * DB 查得到再覆蓋上去 —— 這樣就算 DB 還沒 seed，金額依然是伺服器端說了算。
+ * 商品價格表。**只認資料庫**。
+ *
+ * 舊版會先鋪 lib/content.ts 的靜態價格再讓 DB 覆蓋。那在還沒有後台的時候
+ * 是合理的保險，但現在後台可以改價了，靜態價就變成一顆定時炸彈：
+ * 商品下架或改價之後，靜態價仍然查得到，於是會用一個過期的金額真的收錢。
+ *
+ * 查不到就是查不到，讓呼叫端拒單 —— 少賣一筆的代價遠低於收錯錢。
  */
 async function loadPriceBook(supabase: ServiceClient | null, slugs: string[]) {
   const wanted = new Set(slugs);
   const book = new Map<string, { id: string | null; price: number }>();
-
-  for (const p of PRODUCTS) {
-    if (wanted.has(p.slug)) book.set(p.slug, { id: null, price: p.price });
-  }
 
   if (!supabase || wanted.size === 0) return book;
 
@@ -216,7 +231,7 @@ async function loadPriceBook(supabase: ServiceClient | null, slugs: string[]) {
       .select("id,slug,price")
       .in("slug", [...wanted]);
     if (error) {
-      console.error("[orders] 讀 products 失敗，改用靜態商品價格", error.message);
+      console.error("[orders] 讀 products 失敗", error.message);
       return book;
     }
     for (const row of (data ?? []) as {
@@ -229,7 +244,7 @@ async function loadPriceBook(supabase: ServiceClient | null, slugs: string[]) {
       }
     }
   } catch (err) {
-    console.error("[orders] 讀 products 例外，改用靜態商品價格", err);
+    console.error("[orders] 讀 products 例外", err);
   }
 
   return book;

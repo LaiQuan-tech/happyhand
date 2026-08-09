@@ -10,6 +10,8 @@ export const metadata: Metadata = {
     "在家慢慢練的線上課程，每一堂都可以永久回放，看不懂的地方隨時倒帶重來。也有實體工作坊與節氣訂閱計畫，不確定從哪堂開始可以打 02-2833-5820 問我們。",
 };
 
+export const revalidate = 300;
+
 /** 課程總覽（設計稿 195–336 行：桌機 201–280、手機 282–334） */
 export default async function CoursesPage() {
   const products = await getProducts();
@@ -30,7 +32,27 @@ export default async function CoursesPage() {
           </div>
         </section>
 
-        <CourseFilter products={products} />
+        {products.length > 0 ? (
+          <CourseFilter products={products} />
+        ) : (
+          /* 拿掉靜態 fallback 之後，「查不到課程」會誠實顯示成這樣。
+             不留一個空的篩選列讓人以為是自己按錯了。 */
+          <div className="mx-auto max-w-maxw px-[20px] py-[48px] text-center md:px-[40px] md:py-[72px]">
+            <p className="t-body text-brown-700">
+              課程清單暫時讀不到，可能是系統正在更新。
+            </p>
+            <p className="t-body mt-[8px] text-brown-500">
+              想知道有哪些課，打{" "}
+              <a
+                href={SITE.phoneHref}
+                className="-my-[7px] inline-block py-[11px] whitespace-nowrap text-brown-700 underline underline-offset-4 hover:text-caramel-dk"
+              >
+                {SITE.phone}
+              </a>{" "}
+              我們直接告訴你。
+            </p>
+          </div>
+        )}
 
         <div className="mx-auto max-w-maxw px-[20px] pb-[32px] md:px-[40px]">
           <p className="t-caption border-t border-sand-300 pt-[20px] text-brown-500">
