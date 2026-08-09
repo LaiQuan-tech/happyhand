@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireCapability, adminErrorMessage } from "@/lib/admin/guard";
+import { requireCapability, adminErrorMessage, AdminAuthError } from "@/lib/admin/guard";
 import { writeAudit } from "@/lib/admin/audit";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
@@ -73,12 +73,18 @@ export async function adjustSeats(sessionId: string, delta: number): Promise<Act
       p_delta: delta,
     });
     if (error) {
-      console.error("[admin/sessions] admin_adjust_seats 失敗", error);
+      console.error("[admin/sessions] admin_adjust_seats 失敗", error.code, error.message);
       // 函式裡的 raise exception 用 PT404，message 已經是中文，可以直接顯示。
       return { error: error.message || "調整名額失敗，請重試一次。" };
     }
 
-    const after = data as unknown as { seats_taken: number; capacity: number; status: string } | null;
+    // admin_adjust_seats 宣告 `returns public.workshop_sessions`（非 setof），
+    // 實測 PostgREST 回的是單一物件。但 PostgREST 對內嵌／複合型別
+    // 有時給物件有時給陣列，這裡跟 queries.ts 的 pickOne() 一樣做零成本保險。
+    const raw = data as unknown;
+    const after = (Array.isArray(raw) ? raw[0] : raw) as
+      | { seats_taken: number; capacity: number; status: string }
+      | null;
     const prev = before as unknown as { seats_taken: number; capacity: number; status: string };
 
     if (after && after.seats_taken === prev.seats_taken) {
@@ -147,19 +153,27 @@ export async function setSessionStatus(
       };
     }
 
+    // 帶上 .eq("status", current)：上面的白名單檢查是拿「幾毫秒前讀到的狀態」判的。
+    // 沒有這個條件的話，A 讀到 open、B 中間把場次改成 cancelled、A 再寫入 closed，
+    // 就會繞過 cancelled ⇸ closed 這條不存在的轉移，而且稽核會記成
+    // 「open → closed」這種與事實不符的紀錄。
     const { data: after, error } = await db
       .from("workshop_sessions")
       .update({ status: target })
       .eq("id", sessionId)
+      .eq("status", current)
       .select("status")
       .maybeSingle();
     if (error) {
-      console.error("[admin/sessions] 更新場次狀態失敗", error);
+      console.error("[admin/sessions] 更新場次狀態失敗", error.code, error.message);
       return { error: "更新場次狀態失敗，請重試一次。" };
+    }
+    if (!after) {
+      return { error: "這個場次剛剛被其他同事改過了，請重新整理後再試。" };
     }
 
     // trigger 可能把 open 立刻改回 full（人數已滿），據實記錄落地的值。
-    const landed = toSessionStatus((after as unknown as { status: string } | null)?.status ?? target);
+    const landed = toSessionStatus((after as unknown as { status: string }).status);
 
     await writeAudit(staff, {
       action: "session.set_status",
@@ -229,7 +243,11 @@ export async function addWaitlistEntry(sessionId: string, formData: FormData): P
           .maybeSingle();
 
         if (error) {
-          console.error("[admin/sessions] 候補登記失敗", error);
+          // ⚠️ 只記 code 與 message，**不要**把 error 整包丟進 log。
+          // 這支的 insert payload 是姓名＋電話＋Email；Postgres 的 check / not-null
+          // 違規訊息會帶 `DETAIL: Failing row contains (…)`，PostgREST 會把它放進
+          // error.details 一路傳回來 —— 整包記下去等於把客人個資寫進 Vercel log。
+          console.error("[admin/sessions] 候補登記失敗", error.code, error.message);
           outcome = "failed";
         } else {
           await writeAudit(staff, {
@@ -247,7 +265,10 @@ export async function addWaitlistEntry(sessionId: string, formData: FormData): P
     }
   } catch (err) {
     console.error("[admin/sessions] addWaitlistEntry 例外", err);
-    outcome = "denied";
+    // 只有真的是權限問題才說「你沒有權限」。
+    // createServiceClient() 在環境變數沒設時也會 throw 到這裡，
+    // 一律回 denied 的話員工會跑去找負責人改角色，但真正壞掉的是伺服器設定。
+    outcome = err instanceof AdminAuthError ? "denied" : "failed";
   }
 
   // redirect() 是靠丟例外實作的，必須在 try/catch 外面呼叫，

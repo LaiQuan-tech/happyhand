@@ -27,8 +27,8 @@ export const dynamic = "force-dynamic";
 export default async function AdminSessionsPage({
   searchParams,
 }: {
-  // Next 15：searchParams 是 Promise
-  searchParams: Promise<{ past?: string }>;
+  // Next 15：searchParams 是 Promise。重複參數 Next 會給 string[]。
+  searchParams: Promise<{ past?: string | string[] }>;
 }) {
   // 頁面層的授權。layout 只擋「不是員工」，擋不了「是員工但沒有 orders:read」
   // ——內容編輯（editor）就屬於後者，他不該看到客人的姓名電話。
@@ -45,7 +45,8 @@ export default async function AdminSessionsPage({
 
   const params = await searchParams;
   // 沒勾的 checkbox 不會出現在 query string，所以「有這個參數」就等於「要看已結束的」。
-  const includePast = params.past === "on";
+  const past = Array.isArray(params.past) ? params.past[0] : params.past;
+  const includePast = past === "on";
 
   let db = null;
   try {

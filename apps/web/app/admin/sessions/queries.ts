@@ -82,7 +82,7 @@ export type SessionDetail = {
 };
 
 export type RosterEntry = {
-  itemId: string;
+  /** 以訂單為單位，不是以 order_items 為單位（見 loadRoster 的合併說明） */
   orderId: string;
   orderNo: string;
   name: string | null;
@@ -172,13 +172,26 @@ export async function loadRoster(
           }>;
     };
 
-    const rows: RosterEntry[] = [];
+    /**
+     * 依 order_id 合併。
+     *
+     * order_items 沒有 (order_id, session_id) 的唯一約束，所以同一張訂單
+     * 可能有兩行都指向同一場（購物車分兩行買同一場次）。不合併的話
+     * 同一個人會在簽到表與 CSV 上出現兩次，現場的人會以為他重複報名。
+     * 人數把兩行的 qty 加起來才是他實際佔的位子數。
+     */
+    const byOrder = new Map<string, RosterEntry>();
     for (const raw of (data ?? []) as unknown as Raw[]) {
       const order = pickOne(raw.orders);
       // !inner 保證有值；防禦性跳過只是為了不讓一筆髒資料炸掉整張簽到表。
       if (!order) continue;
-      rows.push({
-        itemId: raw.id,
+
+      const existing = byOrder.get(order.id);
+      if (existing) {
+        existing.qty += raw.qty ?? 1;
+        continue;
+      }
+      byOrder.set(order.id, {
         orderId: order.id,
         orderNo: order.order_no,
         name: order.contact_name,
@@ -190,6 +203,7 @@ export async function loadRoster(
         createdAt: order.created_at,
       });
     }
+    const rows = [...byOrder.values()];
 
     // 依付款時間排序：簽到表照繳費先後排，客服對帳時比較好找。
     rows.sort((a, b) => (a.paidAt ?? a.createdAt).localeCompare(b.paidAt ?? b.createdAt));
@@ -280,6 +294,13 @@ export async function loadSessionList(
   }
 }
 
+/**
+ * 每個場次的已付款人數與訂單數。
+ *
+ * ⚠️ 這兩支計數查詢**不 throw**：候補計數掛掉不該讓客服連場次清單都看不到。
+ *    查失敗時回空 Map（該欄顯示 0）並在 server log 留下錯誤，
+ *    主清單照樣渲染。這是刻意讓錯誤只影響一欄而不是整頁。
+ */
 async function loadPaidCounts(
   db: Db,
   sessionIds: string[],
@@ -289,15 +310,30 @@ async function loadPaidCounts(
 
   const { data, error } = await db
     .from("order_items")
-    .select("session_id, qty, orders!inner(status)")
+    .select("session_id, qty, order_id, orders!inner(status)")
     .in("session_id", sessionIds)
     .eq("orders.status", "paid");
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin/sessions] 已付款人數計數失敗", error.code, error.message);
+    return out;
+  }
 
-  for (const raw of (data ?? []) as unknown as { session_id: string; qty: number }[]) {
+  // 訂單數要去重：同一張訂單可能有兩行都指向同一場（見 loadRoster）。
+  const seenOrders = new Map<string, Set<string>>();
+  for (const raw of (data ?? []) as unknown as {
+    session_id: string;
+    qty: number;
+    order_id: string;
+  }[]) {
     const current = out.get(raw.session_id) ?? { headcount: 0, orders: 0 };
     current.headcount += raw.qty ?? 0;
-    current.orders += 1;
+
+    const orders = seenOrders.get(raw.session_id) ?? new Set<string>();
+    if (!orders.has(raw.order_id)) {
+      orders.add(raw.order_id);
+      current.orders += 1;
+      seenOrders.set(raw.session_id, orders);
+    }
     out.set(raw.session_id, current);
   }
   return out;
@@ -312,7 +348,10 @@ async function loadWaitingCounts(db: Db, sessionIds: string[]): Promise<Map<stri
     .select("session_id")
     .in("session_id", sessionIds)
     .eq("status", "waiting");
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin/sessions] 候補計數失敗", error.code, error.message);
+    return out;
+  }
 
   for (const raw of (data ?? []) as unknown as { session_id: string }[]) {
     out.set(raw.session_id, (out.get(raw.session_id) ?? 0) + 1);

@@ -24,23 +24,25 @@ export function csvCell(
   opts: { forceText?: boolean } = {},
 ): string {
   if (value === null || value === undefined) return "";
-  let s = String(value);
-
-  // 先擋公式，再考慮引號 —— 順序不能反，否則單引號會被包進引號裡失去效果
-  if (FORMULA_PREFIXES.some((p) => s.startsWith(p))) {
-    s = "'" + s;
-  }
+  const s = String(value);
 
   if (opts.forceText) {
-    // ="0912345678" 這種寫法本身含有雙引號，要先逸出內部的引號
+    // ="…" 本身就已經讓 Excel 當成文字了，不需要也不可以再加公式前綴的單引號。
+    // 兩個一起用會變成 ="'+886…"，那個單引號會在儲存格裡「看得見」——
+    // 隱形的文字標記只在裸值前面才有效。
     return `="${s.replace(/"/g, '""')}"`;
   }
 
-  if (/[",\r\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
+  // 擋公式：值以 = + - @ 開頭時 Excel／Sheets 會當成公式執行。
+  // 順序在引號包裝之前 —— 反過來的話單引號會被包進引號裡失去效果。
+  const guarded = FORMULA_PREFIXES.some((p) => s.startsWith(p)) ? "'" + s : s;
+
+  if (/[",\r\n]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
-  return s;
+  return guarded;
 }
+
 
 export type CsvColumn<T> = {
   header: string;

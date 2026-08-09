@@ -73,7 +73,11 @@ export function WaitlistPanel({
   notice?: string;
 }) {
   const waitingCount = entries.filter((entry) => entry.status === "waiting").length;
-  const resolvedNotice = notice ? NOTICES[notice] : undefined;
+  // Object.hasOwn 而不是 NOTICES[notice]：?wl=__proto__ 或 ?wl=constructor
+  // 會從 Object.prototype 拿到一個 truthy 的東西，然後渲染一個內容是 undefined 的紅框。
+  // 不會 XSS（React 會 escape），但畫面會出現一個沒有文字的錯誤提示。
+  const resolvedNotice =
+    notice && Object.hasOwn(NOTICES, notice) ? NOTICES[notice] : undefined;
 
   return (
     <section id="waitlist" className="flex flex-col gap-3">

@@ -42,9 +42,10 @@ export default async function AdminSessionDetailPage({
   params,
   searchParams,
 }: {
-  // Next 15：params 與 searchParams 都是 Promise
+  // Next 15：params 與 searchParams 都是 Promise。
+  // ?wl=a&wl=b 這種重複參數 Next 會給 string[]，型別要誠實寫出來。
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ wl?: string }>;
+  searchParams: Promise<{ wl?: string | string[] }>;
 }) {
   let staff;
   try {
@@ -136,7 +137,7 @@ export default async function AdminSessionDetailPage({
         ) : (
           <DataList
             items={roster.rows}
-            keyOf={(row) => row.itemId}
+            keyOf={(row) => row.orderId}
             caption="這一場已付款的報名者"
             empty={
               <>
@@ -187,7 +188,7 @@ export default async function AdminSessionDetailPage({
         entries={waitlist.rows}
         error={waitlist.error}
         canWrite={canWaitlist}
-        notice={query.wl}
+        notice={Array.isArray(query.wl) ? query.wl[0] : query.wl}
       />
 
       {/* ------------------------------------------------------ 名額調整 */}
