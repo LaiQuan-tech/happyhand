@@ -98,6 +98,93 @@ supabase db push
 需要的 repository secrets：`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、
 `NEXT_PUBLIC_SITE_URL`、`SUPABASE_ACCESS_TOKEN`、`SUPABASE_PROJECT_ID`、`SUPABASE_DB_PASSWORD`。
 
+## 管理員後台 `/admin`
+
+### 角色
+
+| role | 中文 | 能做什麼 |
+|---|---|---|
+| `customer` | 一般會員（預設） | 只有前台，進不了 `/admin` |
+| `support` | 客服 | 訂單、標記收款、取消退款、報名名單匯出、候補、開關場次報名 |
+| `editor` | 內容編輯 | 課程與工作坊 CRUD、單元、場次、圖片上傳 |
+| `owner` | 負責人 | 以上全部 ＋ 員工帳號管理 ＋ 稽核紀錄 |
+
+`editor` **看不到訂單**是刻意的：訂單含姓名、電話、Email、寄送地址，
+內容編輯的工作不需要這些。能力表的唯一真相在 `apps/web/lib/admin/roles.ts`。
+
+### 第一位 owner 怎麼產生
+
+到 Supabase Dashboard 的 SQL editor 執行一次（email 是 PII，刻意不寫進 migration）：
+
+```sql
+insert into public.staff_invites (email, role)
+values (lower(trim('負責人的信箱')), 'owner');
+```
+
+然後該信箱到 `/login` 註冊，`handle_new_user()` trigger 會自動套用角色並刪掉那筆邀請。
+之後所有員工都由 owner 在 `/admin/staff` 邀請，不需要再下 SQL。
+owner 不需要、也不可以替員工設密碼。
+
+### 為什麼授權不走 RLS
+
+後台寫入一律經 service role，授權擋在 TypeScript 層（`lib/admin/guard.ts`），
+**沒有寫任何 admin RLS policy**。這不是偷懶：
+
+`supabase/migrations/20260808000002_rls.sql` 開頭 `revoke all ... from anon, authenticated`，
+讓「沒有 GRANT」本身就是最強的一道防線。走真 RLS 的話得
+`grant insert/update/delete on products… to authenticated`、
+`grant update on orders to authenticated` —— 後者那個檔案的註解正好寫著為什麼不行
+（「orders.status 若使用者可改，任何人都能把自己的訂單改成 paid」）。
+為了後台去拆掉這道保護不划算。
+
+代價：對 service role key 外洩沒有第二道防線。緩解是 key 只存在 Vercel 環境變數
+（不進 client bundle）＋ `audit_log` 留下每一筆寫入的痕跡。
+
+四層守衛：
+
+| 層 | 位置 | 擋什麼 |
+|---|---|---|
+| 1 | `middleware.ts` | 只看有無 session cookie，**不查 DB**。`/api/admin/*` 回 401 不導轉 |
+| 2 | `app/admin/layout.tsx` | 查 role，非員工導回首頁。**保護不了 server action** |
+| 3 | 每支 server action / route handler 的 `requireCapability()` | **唯一不能少的一層** |
+| 4 | DB | 維持 revoke-all |
+
+### 圖片素材
+
+public bucket **`media`**，bucket 名的唯一真相在 `apps/web/lib/admin/media.ts`。
+
+⚠️ **bucket 名一旦有圖就不能改** —— `products.cover_url` 存的是完整 public URL，
+改名會讓所有既有圖片 404。
+
+⚠️ 該 bucket **刻意沒有任何 `storage.objects` policy**。讀走 public endpoint 不經 RLS，
+寫因為沒有 insert policy 而全擋，上傳只能經 `/api/admin/uploads`。
+**不要「順手補齊 RLS」加 select policy** —— 加了之後匿名就能用 `storage.list()`
+列出整個 bucket 的檔名。
+
+圖片刪除只從欄位移除，**不刪 storage 檔案**（誤刪線上圖的代價高於孤兒檔）。
+bucket 會單向長大，長期需要清理腳本。以目前規模一年不到 50MB。
+
+### 報名名單與 `seats_taken`
+
+報名名單是從 `order_items` join `orders(status='paid')` **即時算出來的**，
+不是讀 `seats_taken`。
+
+`seats_taken` 是場次建立時寫入的初始值，全站沒有任何程式碼寫過它
+（`reserve_seat()` 那套 15 分鐘暫扣沒有接上結帳流程）。所以它與實際報名數
+**目前對不起來**，後台兩個數字都會顯示並標註原因。
+校正手段只有 `/admin/sessions/[id]` 的名額微調（走 `admin_adjust_seats` RPC）。
+
+`seats_taken` 仍然有作用：結帳時的可用名額 = `capacity − seats_taken − 未付款但已下單`。
+
+### 報名名單 CSV 是個資出口
+
+姓名＋電話＋Email＋地址會一次打包離開系統。每次匯出都會寫進 `audit_log`
+（誰、何時、哪一場、幾筆幾人）。**流程上要跟好日子講清楚誰能匯、匯出後存哪。**
+
+`lib/admin/csv.ts` 處理了三個不做就會出事的問題：formula injection
+（姓名是使用者輸入，`=HYPERLINK(...)` 會在員工開檔時真的執行）、
+Excel 吃掉電話開頭的 0、UTF-8 中文亂碼（Excel 只看 BOM）。
+
 ## 設計規範
 
 視覺真相是 `design_handoff_happyhands/design/happyhands-B-all-pages.dc.html`（7 頁 × 桌機＋手機）。
