@@ -134,9 +134,12 @@ export function RoleSelect({
         aria-label={`${subject} 的角色`}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
+        // adminControlClass 已經有 w-full，這裡不要再寫 w-auto 去跟它打架
+        // —— Tailwind v4 的勝負由 CSS 產出順序決定，不是 class 字串的順序，
+        // 那種寫法在不同版本會翻盤。撐滿容器對觸控也比較好按，只加一個上限避免桌機拉太寬。
         className={`${adminControlClass} ${adminControlHeight} ${adminBorderClass(
           error ?? undefined,
-        )} w-auto min-w-[7.5rem] appearance-none bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pr-9`}
+        )} max-w-[18rem] appearance-none bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pr-9`}
         style={{
           // 與 admin-field.tsx 的 AdminSelect 用同一張收合箭頭，外觀才一致。
           backgroundImage:

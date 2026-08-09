@@ -29,7 +29,10 @@ import {
  *    3. 邀請已註冊的信箱 —— handle_new_user() 只在「註冊當下」消費邀請，
  *       已經有帳號的人不會再觸發，那筆邀請永遠不會生效也不會報錯。
  *
- * ⚠️ `"use server"` 檔案只能 export async function。純函式放在 ./queries.ts。
+ * ⚠️ `"use server"` 檔案只能 export async function，所以三道保護的判斷本體
+ *    住在 ./rules.ts（純函式、零 IO、不 import server-only）。
+ *    拆出去不只是為了整潔：那份檔案可以被腳本直接 import 來驗，
+ *    驗到的就是這裡實際呼叫的那份程式碼，不是另外抄一份長得很像的邏輯。
  */
 
 export type ActionResult = { error?: string | null } | undefined;

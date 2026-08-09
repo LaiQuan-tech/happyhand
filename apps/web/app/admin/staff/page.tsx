@@ -1,6 +1,6 @@
 import { requireCapability, adminErrorMessage, AdminAuthError } from "@/lib/admin/guard";
 import { createServiceClient } from "@/lib/supabase/server";
-import { STAFF_ROLES, ROLE_LABELS, ROLE_DESCRIPTIONS } from "@/lib/admin/roles";
+import { STAFF_ROLES, ROLE_LABELS } from "@/lib/admin/roles";
 import { DataList } from "@/components/admin/data-list";
 import { AdminField, AdminSelect } from "@/components/admin/admin-field";
 import { formatTaipei } from "@/components/admin/datetime-field";
@@ -231,7 +231,10 @@ export default async function AdminStaffPage({
                   value: role,
                   label: ROLE_LABELS[role],
                 }))}
-                hint={ROLE_DESCRIPTIONS.support}
+                // 這裡刻意不寫某個角色的說明：<select> 是非受控的，
+                // 使用者改選之後這行不會跟著變，會變成一句錯的話。
+                // 四個角色的差別完整列在下方的「四種角色能做什麼」。
+                hint="預設是權限最小的客服。各角色的差別見下方對照表。"
                 wrapperClassName="min-w-0 admin:w-[13rem] admin:shrink-0"
               />
 
