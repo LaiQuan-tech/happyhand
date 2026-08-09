@@ -154,6 +154,12 @@ export async function POST(request: Request) {
     };
   });
 
+  // ---------- 3.5 工作坊名額檢查 ----------
+  const capacityError = supabase
+    ? await checkSessionCapacity(supabase, lines)
+    : null;
+  if (capacityError) return bad(capacityError);
+
   const total = lines.reduce((sum, l) => sum + l.unit_price * l.qty, 0);
   const price_unverified = lines.some((l) => l.price_unverified);
   const order_no = makeOrderNo();
@@ -209,6 +215,98 @@ function getServiceClient() {
 }
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
+
+/**
+ * 工作坊名額檢查。
+ *
+ * 在此之前這支 API 完全不看名額 —— 場次標成「已額滿」照樣收得到訂單，
+ * 客服要到標記收款那一刻才會發現人數對不上（那時候人已經付錢了）。
+ *
+ * 可用名額 = capacity − seats_taken − 尚未付款但已下單的數量
+ *
+ * 「尚未付款但已下單」要算進去：這站是 ATM／人工匯款，從下單到客服標記收款
+ * 中間可能隔好幾天，那段時間位子已經被佔住了。
+ *
+ * ⚠️ 已知限制：這是「檢查後再寫入」，兩筆同時打進來仍可能雙雙通過
+ * （中間沒有鎖）。要完全杜絕得走 reserve_seat() 那套 15 分鐘暫扣，
+ * 那會改到整個結帳流程。以目前的規模（小班制、每月幾場）這個殘餘風險
+ * 遠小於「完全不檢查」，而且客服在標記收款時還有第二道提示。
+ */
+async function checkSessionCapacity(
+  supabase: ServiceClient,
+  lines: Line[],
+): Promise<string | null> {
+  // 同一場次在購物車裡出現多次要合併計算
+  const wanted = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.session_id) continue;
+    wanted.set(l.session_id, (wanted.get(l.session_id) ?? 0) + l.qty);
+  }
+  if (wanted.size === 0) return null;
+
+  const ids = [...wanted.keys()];
+
+  try {
+    const { data: sessions, error } = await supabase
+      .from("workshop_sessions")
+      .select("id, capacity, seats_taken, status, starts_at")
+      .in("id", ids);
+    if (error) {
+      console.error("[orders] 讀場次失敗，略過名額檢查", error.message);
+      return null; // 讀不到就不擋，寧可讓客服事後處理也不要擋掉真的想報名的人
+    }
+
+    // 已下單但還沒付款的數量
+    const { data: pendingItems } = await supabase
+      .from("order_items")
+      .select("session_id, qty, orders!inner(status)")
+      .in("session_id", ids)
+      .eq("orders.status", "pending");
+
+    const pending = new Map<string, number>();
+    for (const it of (pendingItems ?? []) as {
+      session_id: string;
+      qty: number;
+    }[]) {
+      pending.set(it.session_id, (pending.get(it.session_id) ?? 0) + it.qty);
+    }
+
+    for (const s of (sessions ?? []) as {
+      id: string;
+      capacity: number;
+      seats_taken: number;
+      status: string;
+      starts_at: string;
+    }[]) {
+      const want = wanted.get(s.id) ?? 0;
+
+      if (s.status === "cancelled") {
+        return `這一場工作坊已經取消了，請回工作坊頁面看看其他場次，或打 ${SITE.phone} 我們幫你安排。`;
+      }
+      if (s.status === "closed") {
+        return `這一場工作坊已經停止報名了，請打 ${SITE.phone} 我們幫你看看還有沒有位子。`;
+      }
+
+      const available = s.capacity - s.seats_taken - (pending.get(s.id) ?? 0);
+      if (want > available) {
+        return available <= 0
+          ? `這一場工作坊的位子已經滿了。打 ${SITE.phone} 可以登記候補，有人取消我們會通知你。`
+          : `這一場工作坊只剩 ${available} 個位子，你選了 ${want} 個。請調整人數，或打 ${SITE.phone} 我們幫你想辦法。`;
+      }
+    }
+
+    // 購物車裡有場次 id 但資料庫查不到 → 那個場次被刪了
+    const found = new Set((sessions ?? []).map((s: { id: string }) => s.id));
+    if (ids.some((id) => !found.has(id))) {
+      return `購物車裡有已經不存在的工作坊場次，請回工作坊頁面重新選一次。`;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[orders] 名額檢查例外，略過", err);
+    return null;
+  }
+}
 
 /**
  * 商品價格表。**只認資料庫**。
