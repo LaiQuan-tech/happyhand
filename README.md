@@ -201,6 +201,133 @@ bucket 會單向長大，長期需要清理腳本。以目前規模一年不到 
 （姓名是使用者輸入，`=HYPERLINK(...)` 會在員工開檔時真的執行）、
 Excel 吃掉電話開頭的 0、UTF-8 中文亂碼（Excel 只看 BOM）。
 
+## 學員會員中心 `/account`
+
+學員下單後自動有帳號，登入就能上課、查訂單、看報名的工作坊。
+
+### 訂單一定要有主人
+
+這是整個會員中心的地基。在 2026-08 之前 `orders.user_id` 從來沒被寫過，
+而 `entitlements.user_id` 是 NOT NULL 的主鍵前導欄 ——
+也就是說舊的資料模型下「開通線上課程」**物理上做不到**。
+
+現在有三道，缺一不可：
+
+1. **下單當下**（`app/api/orders/route.ts`）：已登入就用 session 的身分；
+   否則用客人填的 Email 建帳號（`lib/account/provision.ts`）。
+   Admin API 逾時（3 秒）不擋單。
+2. **登入當下**（`claim_guest_orders()` RPC）：把 `contact_email` 等於自己
+   已驗證信箱的未歸戶訂單認領過來。呼叫點是 `/auth/callback`、`/auth/confirm`、
+   `/account` 的 layout。
+3. **worker 每小時**（`backfill-order-users` job）：處理逾時與「客人一週後才註冊」。
+
+> 🔴 `claim_guest_orders()` 與 `backfill_order_user_ids()` **都必須驗
+> `email_confirmed_at is not null`**。少了那一行，任何人註冊一個未驗證的
+> `victim@example.com` 就能認領受害者的訂單，看到姓名、電話、地址。
+> 這是整套設計裡最容易寫錯、後果最嚴重的一行。
+
+自動建帳號時 `email_confirm` 一定要 `true`：Supabase 的自動身分歸戶
+（之後用 Google／LINE 登入時掛到既有帳號）明文要求 email 已驗證。
+設 `false` 的話客人用 Google 登入會變成第二個帳號，然後看不到自己買的課，
+**而且不會報錯**。
+
+已知且可接受的取捨：若甲用乙的 Email 下單，乙註冊後會看到甲的姓名／電話／地址。
+無法避免（那封「設定密碼」信本來就寄到乙的信箱了），業界一致如此。
+
+### 付款 → 開通
+
+`transitionOrder()` 在條件式 update 之後、`syncSeats()` 之前呼叫
+`grant_entitlements_for_order()`。排在名額同步前面是刻意的：
+名額沒對只是「數字要人工修」，課沒開通是「客人付了錢看不到課」。
+
+三種開不了通的情形（沒綁帳號、`price_unverified`、RPC 失敗）**一律回報成畫面警告**，
+不靜默。另有三個顯示點：訂單明細的「會員帳號與課程開通」面板、
+訂單列表、以及 `/admin` 總覽的「已收款但未開通：N」——最後那個是唯一每天會被看到的地方。
+
+**退款不會自動撤銷觀看權限。** `entitlements` 的 PK 是 `(user_id, product_id)`，
+權限跨訂單共用，自動撤銷會誤刪另一筆合法訂單帶來的權限。改成客服逐課按按鈕（有 audit）。
+
+### 影片：YouTube 不公開
+
+`course_lessons.youtube_id` 存 11 碼 ID，後台貼整條網址由 `lib/youtube.ts` 解析。
+
+> ⚠️ **影片在 YouTube 上必須設「不公開」（unlisted）。**
+> 設「公開」→ 任何人搜尋得到，付費內容等於免費。
+> 設「私人」→ 無法嵌入，學員一定看不到。
+> **沒有任何程式碼檢查得到這件事**，只能靠上傳的人記得（後台欄位下方有紅字提醒）。
+
+**對內容保護要誠實**：unlisted 擋得住沒買的人，擋不住買了的人。影片 ID 一定要
+送到瀏覽器才能播，已購買者按 F12 讀 iframe 的 src、或右鍵複製網址就拿得到，
+然後 `yt-dlp` 一行下載整支（unlisted 不需登入）。這在架構上無解 ——
+換 Vimeo 或簽名 URL 也一樣，同一個人照樣可以螢幕錄影。
+
+能做的是：
+- `POST /api/lessons/[id]/video` 驗證 entitlement 後才回 ID，**教室頁的 RSC
+  刻意不撈 `youtube_id`**（撈了整門課的 ID 會一次進 HTML）。
+  `course_lessons` 的欄位級 grant 讓這件事變成「寫錯也拿不到」而不是靠自律。
+- 播放器上疊遮罩後的 Email 浮水印：技術防護 0%，但外流時追得到來源。
+- **影片 ID 可以隨時換** —— 這是唯一真正的補救手段。外流後重新上傳一支
+  unlisted、在後台改掉 ID，舊連結就變孤兒。
+
+YouTube 一般頻道**沒有**「限制嵌入網域」功能（那是 Content Manager 夥伴專屬），
+不要對客戶承諾這件事。
+
+### 兩條寄信路徑是刻意並存的
+
+- **忘記密碼** → Supabase 內建 SMTP（`resetPasswordForEmail`）。
+  保留它自帶的防帳號枚舉與 rate limit，自己重做很容易做錯。
+- **訂單成立／設定密碼／課程開通** → 我們自己的 `email_outbox`。
+  需要控制中文文案與觸發時機，而且要能重試、要查得到。
+
+**不要「統一」它們。** 兩者解決的問題不一樣。
+
+`email_outbox.dedupe_key` 的 unique 就是冪等保證。web 端用 `after()` 立刻試寄一次，
+worker 的 `flush-email-outbox`（每 2 分鐘）負責重試，八次後標 `failed` 並上 `/admin` 總覽。
+
+寄件人是 `noreply@gathertaiwan.com` —— Resend 帳號裡只有 `gathertaiwan.com` 與
+`realreal.cc` 通過驗證，`happyhands.tw` 沒登記。
+
+> 🔴 `gathertaiwan.com` 是**給樂其他專案共用的寄件網域**。
+> `/api/orders` 會用它寄信給請求裡指定的任意信箱，所以防濫用不是可選的：
+> setup 信只在新建帳號時寄、`dedupe_key` 綁 `user_id`（同一信箱一輩子只寄一封）、
+> IP 節流、全站每小時 setup 信上限。出事時把 `SETUP_EMAIL_ON` 設成 `paid`
+> 可以立刻把寄信移到客服手動的環節。
+
+### 信件連結走 `/auth/confirm`，不是 `/auth/callback`
+
+`/auth/callback` 吃 `?code=`（PKCE），而 PKCE 的 `code_verifier` 綁在
+**發起請求的那個瀏覽器**。60–75 歲客群最典型的行為是「在 Safari 按忘記密碼 →
+打開 Gmail App → 點連結 → Gmail 用內建瀏覽器開」，那裡沒有 `code_verifier`。
+
+所以：
+- `?code=` → `/auth/callback`（**只給 OAuth**，那一定是使用者自己按的按鈕）
+- `?token_hash=` → `/auth/confirm`（信件連結，`verifyOtp` 不需要 `code_verifier`）
+
+Supabase 的 Email Template 已改成 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=…&next=…`。
+改模板的時候記得四份（recovery / confirmation / magic_link / email_change）都要改。
+
+### 「買過但後來下架」的商品仍然看得到
+
+`products_select_published` 這類 policy 綁 `is_published = true`，對公開目錄正確，
+但會員中心用同一組 policy 的話，公司一下架課程，客人的「我的學習」就會少一門課
+**而且不報錯**。`20260810000007` 用 `owns_product()` / `registered_for_session()`
+兩支 security definer 函式加三條 OR 的 policy 放行已經買過的人。
+
+### 尚未啟用：LINE / Google 登入
+
+程式面已經預留（`handle_new_user()` 的 `full_name → name → nickname` fallback
+就是為 LINE 準備的，LINE 只給 `name`），但要啟用需要外部憑證：
+
+- **Google**：Supabase 原生 provider。Google Cloud 建 OAuth client，
+  redirect URI 填 `https://<project-ref>.supabase.co/auth/v1/callback`。
+- **LINE**：**Supabase 沒有原生支援**，要走 Custom OIDC
+  （identifier 必須是 `custom:line`，Issuer `https://access.line.me`）。
+  ⚠️ LINE 的 email 權限**要另外送審**。拿不到 email 的話那個帳號
+  **不可能跟訪客訂單歸戶** —— 長輩用 LINE 登入會看到空的「我的學習」，
+  而 log 裡沒有任何錯誤。所以 `email_optional` 要保持關閉，
+  拿不到 email 就讓登入明確失敗並顯示中文說明。
+  **靜默開一個空帳號比登入失敗糟一百倍。**
+
 ## 設計規範
 
 視覺真相是 `design_handoff_happyhands/design/happyhands-B-all-pages.dc.html`（7 頁 × 桌機＋手機）。
@@ -223,8 +350,8 @@ Excel 吃掉電話開頭的 0、UTF-8 中文亂碼（Excel 只看 BOM）。
 ## 尚未完成
 
 - **金流**：綠界 ECPay 尚未串接（缺商店代號／HashKey／HashIV）。目前結帳會建立 `pending` 訂單，由客服用 LINE 確認。
-- **會員功能**：Supabase Auth 已接上（員工登入與後台可用），但 `/account` 的會員中心仍是骨架頁 —— `orders.user_id` 目前永遠是 null（全站訪客結帳），所以會員查不到自己的訂單。要做得先設計「訪客訂單如何綁到後來註冊的帳號」。
-- **影片**：Storage 私有 bucket 與簽名 URL 尚未建立。
+- **第三方登入**：LINE 與 Google 登入尚未啟用，需要外部憑證（見下方「學員會員中心」）。
+- **影片內容**：`course_lessons.youtube_id` 目前全是空的，後台填入 YouTube 網址就會上線。
 - **素材**：設計稿中的斜紋色塊都是圖片佔位，等客戶提供照片（清單見 `design_handoff_happyhands/README.md` §8）。
 - **網域**：目前是 Vercel 預設網域，`happyhands.tw` 尚未掛上。
 - **字型未自架 subset**：目前用 `next/font/google` 載 Noto Sans TC / Noto Serif TC，

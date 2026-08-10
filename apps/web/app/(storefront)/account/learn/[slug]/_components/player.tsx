@@ -299,11 +299,15 @@ export function LessonPlayer({
           <>
             <div ref={mountRef} className="h-full w-full" />
             {watermark && (
-              // 技術防護 0%，嚇阻與溯源有效。半透明、不吃點擊、
-              // 位置在左上角避開 YouTube 的控制列。
+              // 技術防護 0%，嚇阻與溯源有效（螢幕錄影會一起錄進去）。
+              //
+              // 位置在右下、離底部 56px：YouTube 的標題疊在左上角，
+              // 控制列在最底下，這個位置在播放中是空的畫面，
+              // 只有滑鼠移進去叫出控制列時會短暫重疊。
+              // 半透明 + pointer-events-none，不擋到任何操作。
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute top-[10px] left-[12px] rounded bg-black/25 px-[8px] py-[3px] text-[12px] text-white/70 select-none"
+                className="pointer-events-none absolute right-[12px] bottom-[56px] rounded bg-black/30 px-[8px] py-[3px] text-[12px] text-white/65 select-none"
               >
                 {watermark}
               </span>
