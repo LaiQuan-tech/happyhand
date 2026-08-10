@@ -24,7 +24,7 @@ export default async function LoginPage({
       <PageHero
         eyebrow="LOGIN"
         title="登入"
-        lead="這裡是工作人員後台的入口。一般同學要看課程，請直接回首頁。"
+        lead="登入之後就看得到你買的課程和訂單。第一次來的話，用當初下單的 Email 註冊就可以。"
       />
       <div className="px-[20px] md:px-[40px]">
         <LoginForm redirect={redirect} initialError={error} />

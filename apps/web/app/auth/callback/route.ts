@@ -12,7 +12,8 @@ import { createClient } from "@/lib/supabase/server";
  * 不擋的話這裡會變成開放轉址。
  */
 function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/admin";
+  // 預設 /account，理由同 login-form.tsx 的 safeRedirect()。
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/account";
   return raw;
 }
 
@@ -43,6 +44,20 @@ export async function GET(request: NextRequest) {
       "這個連結已經失效或被使用過了，請重新登入或再要一次驗證信",
     );
     return NextResponse.redirect(url);
+  }
+
+  // 認領用同一個信箱下的訪客訂單。
+  //
+  // 這一段是「用 Google／LINE 登入後看得到之前買的課」真的成立的地方：
+  // 訂單的 user_id 是下單當下寫進去的，如果那時候 Admin API 逾時、
+  // 或客人是後來才註冊的，那筆訂單就還掛著 null。
+  // /account 的 layout 也會跑一次，這裡先跑是為了讓第一次登入的人
+  // 一進去就看得到東西，而不是先看到空白再重整。
+  //
+  // 失敗不擋登入：人已經驗證過了，把他擋在門外沒有任何好處。
+  const { error: claimError } = await supabase.rpc("claim_guest_orders");
+  if (claimError) {
+    console.error("[auth/callback] claim_guest_orders 失敗", claimError.message);
   }
 
   return NextResponse.redirect(new URL(next, origin));

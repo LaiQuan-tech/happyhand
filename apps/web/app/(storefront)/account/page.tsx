@@ -1,160 +1,184 @@
 import type { Metadata } from "next";
-import { SITE } from "@/lib/site";
-import { LinkButton, buttonClass } from "@/components/ui/button";
-import { MobileActionBar } from "@/components/mobile-action-bar";
-import { PageHero } from "@/app/_components/page-hero";
-import { CallBand } from "@/app/_components/call-band";
-import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
+import Link from "next/link";
+import { buttonClass } from "@/components/ui/button";
+import { Figure } from "@/components/ui/placeholder";
+import { getMember } from "@/lib/account/guard";
+import { getMyCourses, type MyCourse } from "./queries";
+import {
+  Card,
+  EmptyState,
+  LineButton,
+  LoadError,
+  PageHeading,
+  StatusChip,
+} from "./_components/shell";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "會員中心",
-  description:
-    "登入之後可以看到你買過的線上課程、訂單和報名的工作坊。查詢訂單也可以直接用 LINE 問我們，我們幫你查。",
+  title: "我的學習",
+  description: "你買過的線上課程都在這裡，想看幾次都可以。",
   robots: { index: false, follow: false },
 };
 
 /**
- * Supabase Auth 尚未串接完成。
- * 這頁誠實顯示狀態：沒設定環境變數、沒登入、或讀取失敗，一律當作未登入。
+ * 我的學習。
+ *
+ * 名字照台灣慣例（Hahow、PressPlay、知識衛星三家都叫「我的學習」，
+ * 只有較舊的 YOTTA 叫「我的課程」），但呈現方式為 60–75 歲客群改過：
+ *
+ * ・進度用完整句子「你已經上完 3 堂，還有 9 堂」，不用百分比也不用 3/12
+ * ・**不做「進行中／已完成」分頁籤**。長輩手上的課可能只有一兩門，
+ *   任何分頁都是純粹的認知負擔。實測台灣四家也沒有一家這樣分。
+ * ・「不限觀看次數、沒有觀看期限」要大字寫出來 —— 長輩最大的焦慮是
+ *   「會不會過期」「會不會看不完」，知識衛星把它寫成粗體 FAQ 是對的，
+ *   我們寫在他每次登入都會看到的地方。
+ * ・空狀態有兩句話，第二句處理「買了卻看不到」——那通常是登入的信箱
+ *   跟下單時填的不一樣，是這個設計最容易出事的地方。
  */
-async function getSignedInEmail(): Promise<string | null> {
-  if (!hasSupabaseEnv()) return null;
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.auth.getUser();
-    return data.user?.email ?? null;
-  } catch {
-    return null;
-  }
-}
+export default async function AccountHomePage() {
+  const member = await getMember();
+  const { courses, error } = await getMyCourses();
 
-const PANELS = [
-  {
-    title: "我的課程",
-    desc: "你買過的線上課程和看到哪一堂，之後都會列在這裡。",
-  },
-  {
-    title: "我的訂單",
-    desc: "訂單編號、金額、付款狀態，還有課本寄到哪裡了。",
-  },
-  {
-    title: "我報名的工作坊",
-    desc: "報名的場次、時間、地點，以及可不可以改期。",
-  },
-  {
-    title: "資料設定",
-    desc: "收件地址、電話、Email，之後可以自己改。",
-  },
-];
-
-export default async function AccountPage() {
-  const email = await getSignedInEmail();
+  const greeting = member?.fullName ? `${member.fullName}，你好` : "你好";
 
   return (
-    <div className="pb-action-bar">
-      <PageHero
-        eyebrow="ACCOUNT"
-        title="會員中心"
+    <>
+      <PageHeading
+        title="我的學習"
         lead={
-          email
-            ? "你買過的課程、訂單和工作坊都會放在這裡。"
-            : "買過課的話，用當初填的 Email 登入，就看得到你的課程和訂單。"
+          courses.length > 0
+            ? `${greeting}。你買過的課都在這裡，想看幾次都可以。`
+            : `${greeting}。`
         }
       />
 
-      <section className="bg-white">
-        <div className="mx-auto max-w-[900px] px-[20px] pt-[26px] pb-[40px] md:px-[40px] md:pt-[40px] md:pb-[72px]">
-          {email ? (
-            <>
-              <div className="rounded-card border border-sand-300 bg-cream-100 px-[22px] py-[20px] md:px-[30px] md:py-[24px]">
-                <p className="t-body-sm text-brown-500">目前登入的帳號</p>
-                <p className="t-body mt-[4px] break-all text-brown-900">
-                  {email}
-                </p>
-              </div>
-
-              <div className="mt-[20px] grid gap-[14px] md:mt-[28px] md:grid-cols-2 md:gap-[24px]">
-                {PANELS.map((panel) => (
-                  <div
-                    key={panel.title}
-                    className="rounded-card border border-sand-300 bg-white px-[22px] py-[24px] md:px-[30px] md:py-[28px]"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-[12px] gap-y-[8px]">
-                      <h2 className="t-h3">{panel.title}</h2>
-                      <span className="t-caption rounded-pill border border-sand-400 px-[12px] py-[2px] text-brown-500">
-                        整理中
-                      </span>
-                    </div>
-                    <p className="t-body-sm mt-[10px] text-pretty text-brown-500">
-                      {panel.desc}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <p className="t-body-sm mt-[20px] rounded-card border border-sand-300 bg-cream-100 px-[22px] py-[18px] text-pretty text-brown-500 md:mt-[28px] md:px-[30px] md:py-[22px]">
-                這幾個頁面還在做，內容陸續補上。現在想查訂單或確認課程有沒有開通，用
-                LINE 問我們，我們幫你查。
-              </p>
-            </>
-          ) : (
-            <div className="rounded-card border border-sand-300 bg-cream-100 px-[22px] py-[28px] md:px-[40px] md:py-[40px]">
-              <h2 className="t-h2">還沒登入</h2>
-              <p className="t-body mt-[14px] text-pretty text-brown-700 md:mt-[18px]">
-                買過課的話，用當初填的 Email
-                登入，就看得到你的課程、訂單，還有報名的工作坊。
-              </p>
-
-              <div className="mt-[22px] flex flex-col gap-[10px] md:mt-[28px] md:flex-row md:gap-[16px]">
-                <LinkButton
-                  href="/account"
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  className="md:w-auto"
-                >
-                  用 Email 登入
-                </LinkButton>
-                <a
-                  href={SITE.lineHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonClass({
-                    variant: "outline",
-                    size: "lg",
-                    fullWidth: true,
-                    className: "md:w-auto",
-                  })}
-                >
-                  用 LINE 問我們
-                  <span className="sr-only">（會開啟 LINE）</span>
-                </a>
-              </div>
-
-              <p className="t-body-sm mt-[18px] text-pretty text-brown-500 md:mt-[22px]">
-                登入功能正在開通中，按下去暫時還是回到這一頁。開通之後我們會寄信通知你。在那之前，想確認買了什麼、課程有沒有開通，用
-                LINE 問我們，我們幫你查。
-              </p>
+      {error ? (
+        <LoadError message={error} />
+      ) : courses.length === 0 ? (
+        <EmptyState
+          title="您還沒有課程。"
+          action={
+            <div className="flex flex-col items-center gap-[12px] sm:flex-row sm:justify-center">
+              <Link
+                href="/courses"
+                className={buttonClass({ variant: "primary", size: "lg" })}
+              >
+                點這裡看看有哪些課 →
+              </Link>
             </div>
+          }
+        >
+          <p>
+            如果你買過課卻看不到，可能是登入的信箱跟下單時填的不一樣。
+            <br className="hidden sm:block" />
+            用 LINE 跟我們說一聲，報你的名字就好，我們幫你查。
+          </p>
+          <div className="mt-[16px]">
+            <LineButton label="買了課卻看不到？問我們" />
+          </div>
+        </EmptyState>
+      ) : (
+        <>
+          <p className="t-body rounded-card bg-cream-100 px-[20px] py-[16px] text-brown-900 md:px-[26px] md:py-[18px]">
+            <strong className="font-semibold">
+              課程不限觀看次數，也沒有觀看期限。
+            </strong>
+            <br className="sm:hidden" />
+            <span className="text-brown-700"> 你想看幾次都可以，慢慢來沒關係。</span>
+          </p>
+
+          <ul className="mt-[18px] flex flex-col gap-[16px] md:mt-[24px] md:gap-[20px]">
+            {courses.map((course) => (
+              <li key={course.productId}>
+                <CourseCard course={course} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * 進度句子。
+ *
+ * 刻意不是「3/12」也不是「25%」。長輩讀分數要先做一次換算，
+ * 讀百分比則完全沒有「還剩多少」的體感。完整句子最直接。
+ */
+function progressSentence(course: MyCourse): string {
+  if (course.totalLessons === 0) return "課程內容準備中，開課我們會用 LINE 通知你。";
+  if (course.completedLessons === 0) return `這門課有 ${course.totalLessons} 堂，還沒開始。`;
+  const left = course.totalLessons - course.completedLessons;
+  if (left === 0) return `這門課 ${course.totalLessons} 堂你都上完了，隨時可以再看一次。`;
+  return `你已經上完 ${course.completedLessons} 堂，還有 ${left} 堂。`;
+}
+
+function CourseCard({ course }: { course: MyCourse }) {
+  // 沒有單元的商品（例如還沒排課的訂閱制）不給進教室 ——
+  // 讓長輩點進去看到空白畫面比不給點更糟。
+  const enterable = course.totalLessons > 0 && !course.expired;
+  const started = course.completedLessons > 0;
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-[18px] sm:flex-row sm:items-start sm:gap-[24px]">
+        <Figure
+          src={course.coverUrl ?? undefined}
+          alt={`${course.title} 課程縮圖`}
+          rounded="rounded-card"
+          sizes="(min-width: 640px) 200px, 100vw"
+          className="h-[160px] w-full shrink-0 sm:h-[126px] sm:w-[200px]"
+        />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start gap-x-[12px] gap-y-[8px]">
+            <h2 className="t-h3 min-w-0 text-brown-900">{course.title}</h2>
+            {course.expired && <StatusChip tone="danger">觀看期限已到</StatusChip>}
+          </div>
+
+          {course.subtitle && (
+            <p className="t-body-sm mt-[6px] text-pretty text-brown-500">
+              {course.subtitle}
+            </p>
           )}
+
+          <p className="t-body mt-[12px] text-brown-700">
+            {progressSentence(course)}
+          </p>
+
+          {course.expiresAt && !course.expired && (
+            <p className="t-body-sm mt-[6px] text-brown-500">
+              這門課可以看到 {course.expiresAt.slice(0, 10).replaceAll("-", "/")}。
+            </p>
+          )}
+
+          <div className="mt-[18px]">
+            {enterable ? (
+              <Link
+                href={`/account/learn/${course.slug}`}
+                className={buttonClass({
+                  variant: "primary",
+                  size: "lg",
+                  fullWidth: true,
+                  className: "sm:w-auto",
+                })}
+              >
+                {started
+                  ? `繼續上課：${course.resumeLessonTitle ?? "下一堂"}`
+                  : "開始上課"}
+              </Link>
+            ) : course.expired ? (
+              <LineButton label="想繼續看？跟我們說" />
+            ) : (
+              <p className="t-body-sm text-brown-500">
+                內容準備好我們會用 LINE 通知你。
+              </p>
+            )}
+          </div>
         </div>
-      </section>
-
-      <CallBand
-        heading={
-          <>
-            登入不順利，
-            <br className="md:hidden" />
-            用 LINE 說一聲我們幫你查
-          </>
-        }
-        note="報上當初填的姓名或電話就可以，不用記訂單編號。"
-      />
-
-      {/* 行動列左邊已經是「用 LINE 問」，右邊再放一次會變成兩顆一樣的鈕 */}
-      <MobileActionBar href="/courses" label="看線上課程" />
-    </div>
+      </div>
+    </Card>
   );
 }

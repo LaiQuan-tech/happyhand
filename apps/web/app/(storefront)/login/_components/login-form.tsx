@@ -45,9 +45,13 @@ function mapAuthError(raw: string): string {
  * `//evil.com` 也要擋——瀏覽器會當成 protocol-relative 的絕對網址。
  */
 function safeRedirect(raw: string | undefined): string {
-  if (!raw) return "/admin";
-  if (!raw.startsWith("/")) return "/admin";
-  if (raw.startsWith("//")) return "/admin";
+  // 預設值是 /account 而不是 /admin：這個登入頁的使用者絕大多數是學員，
+  // 員工來的時候一定是被 middleware 從 /admin/* 導過來的，會帶著 ?redirect=。
+  // 反過來設 /admin 的話，學員自己點「登入」會被丟到後台再被踢回首頁，
+  // 看起來就像登入失敗。
+  if (!raw) return "/account";
+  if (!raw.startsWith("/")) return "/account";
+  if (raw.startsWith("//")) return "/account";
   return raw;
 }
 
