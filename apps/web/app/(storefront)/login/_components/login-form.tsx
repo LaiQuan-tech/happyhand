@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/field";
@@ -196,7 +197,21 @@ export function LoginForm({
         </Button>
       </form>
 
-      <p className="mt-[28px] text-center text-[16px] leading-[1.9] text-brown-500">
+      {/* 忘記密碼只在登入模式顯示：註冊模式下它沒有意義，
+          而多一個看不懂的選項對長輩就是多一個卡住的地方。
+          用 <Link> 而不是 <a>，切頁不用重新載入整個站。 */}
+      {mode === "login" && (
+        <p className="mt-[18px] text-center">
+          <Link
+            href="/forgot-password"
+            className="inline-block min-h-[44px] py-[11px] text-[17px] text-caramel-dk underline underline-offset-4 hover:text-brown-900"
+          >
+            忘記密碼？
+          </Link>
+        </p>
+      )}
+
+      <p className="mt-[20px] text-center text-[16px] leading-[1.9] text-brown-500">
         登入有問題嗎？
         <a
           href={SITE.lineHref}
