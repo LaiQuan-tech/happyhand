@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requireCapability, adminErrorMessage, type Staff } from "@/lib/admin/guard";
 import { writeAudit, diffOf } from "@/lib/admin/audit";
+import {
+  grantEntitlementsForOrder,
+  type GrantResult,
+} from "@/lib/admin/entitlements";
+import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
+import { orderPaidEmail } from "@/lib/email/templates";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   ORDER_STATUS_LABELS,
@@ -145,10 +151,20 @@ async function transitionOrder(
     return { error: "這筆訂單已經處理過了，請重新整理看最新狀態" };
   }
 
-  // 5) 名額連動。只有「真的改到了」才會執行到這裡。
+  // 5) 🔴 開通線上課程。刻意排在 syncSeats 前面：
+  //    名額沒同步只是「數字要人工對」，課程沒開通是「客人付了錢看不到課」。
+  //    後者比較嚴重，所以先做，而且它的警告會蓋過名額的警告（見最後的回傳）。
+  //
+  //    只在轉成 paid 時做。轉成 refunded 刻意**不撤銷** ——
+  //    entitlements 的 PK 是 (user_id, product_id)，權限跨訂單共用，
+  //    自動撤銷會誤刪另一筆合法訂單帶來的權限（見 lib/admin/entitlements.ts）。
+  const grant =
+    to === "paid" ? await grantEntitlementsForOrder(orderId) : null;
+
+  // 6) 名額連動。
   const seatOutcome = await syncSeats(supabase, orderId, seatSignFor(from, to));
 
-  // 6) 稽核。writeAudit 永不 throw，所以不用包 try。
+  // 7) 稽核。writeAudit 永不 throw，所以不用包 try。
   await writeAudit(staff, {
     action: AUDIT_ACTION[to],
     entity: "order",
@@ -156,21 +172,79 @@ async function transitionOrder(
     summary:
       `訂單 ${updated.order_no}（${money(updated.total)}）` +
       `由「${ORDER_STATUS_LABELS[from]}」改為「${ORDER_STATUS_LABELS[to]}」` +
+      grantNote(grant) +
       seatOutcome.auditNote,
     diff: {
       ...(diffOf(before, updated, ["status", "paid_at"]) ?? {}),
       ...(seatOutcome.applied.length > 0 ? { seats: seatOutcome.applied } : {}),
+      ...(grant
+        ? { entitlements: { granted: grant.granted, kept: grant.kept, reason: grant.reason } }
+        : {}),
     },
   });
+
+  // 8) 開通通知信。只在真的有新開通課程時寄——重按一次不會再寄一封
+  //    （granted 會是 0），dedupe_key 綁 order_id 是第二道保險。
+  if (grant?.ok && grant.granted > 0) {
+    await queuePaidEmail(supabase, orderId, grant.products);
+  }
 
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
 
-  // 狀態已經改成功了，但名額沒同步完 —— 必須講出來。
-  // 這裡回 error 而不是靜默成功：客服看到訊息會去場次頁確認，
-  // 靜默的話工作坊當天才會發現人數對不上。
+  // 狀態已經改成功了，但後面有一段沒做完 —— 必須講出來。
+  // 這裡回 error 而不是靜默成功：客服看到訊息才會去補，
+  // 靜默的話「付了錢看不到課」要等客人打 LINE 來罵才會發現。
+  if (grant?.warning) return { error: grant.warning };
   if (seatOutcome.warning) return { error: seatOutcome.warning };
   return {};
+}
+
+/** 開通結果寫進 audit summary 的那一句。沒開通的時候尤其要留痕。 */
+function grantNote(grant: GrantResult | null): string {
+  if (!grant) return "";
+  if (grant.ok) {
+    if (grant.granted === 0 && grant.kept === 0) return "";
+    return `，開通線上課 ${grant.granted} 門（原本已有 ${grant.kept} 門）`;
+  }
+  return `，⚠️ 線上課未開通（${grant.reason ?? "unknown"}）`;
+}
+
+/**
+ * 排「課程開通通知」信。
+ *
+ * 收件者用 orders.contact_email 而不是帳號的 email：代訂的情況下
+ * （子女幫長輩訂）這兩個可能不一樣，而訂單上填的那個才是客人自己看的信箱。
+ * worker 的 workshop-reminders.ts 也是同樣的優先序。
+ */
+async function queuePaidEmail(
+  supabase: ReturnType<typeof createServiceClient>,
+  orderId: string,
+  products: string[],
+) {
+  if (products.length === 0) return;
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("order_no, contact_name, contact_email")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error || !data?.contact_email) {
+    console.error("[admin/orders] 開通信少了收件者", orderId, error?.message);
+    return;
+  }
+
+  await enqueueEmail({
+    dedupeKey: `order_paid:${orderId}`,
+    ...orderPaidEmail({
+      to: data.contact_email as string,
+      name: (data.contact_name as string | null) ?? "同學",
+      orderNo: data.order_no as string,
+      courseTitles: products,
+    }),
+  });
+  await flushOutbox();
 }
 
 /* -------------------------------------------------------------- 名額同步 */

@@ -7,6 +7,7 @@ import { Button, LinkButton, buttonClass } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Figure } from "@/components/ui/placeholder";
 import { findProduct } from "@/lib/content";
+import { suggestEmail } from "@/lib/email-typo";
 import { SITE, formatPrice } from "@/lib/site";
 import { CheckoutSteps } from "./checkout-steps";
 import { PaymentOptions, type PaymentMethod } from "./payment-options";
@@ -38,6 +39,15 @@ export function CheckoutView() {
 
   const formRef = useRef<HTMLFormElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 網域可能打錯了的建議。只在 Email 格式本身合法時才提示——
+   * 還在打字打到一半就跳出來會很吵。
+   */
+  const emailSuggestion = useMemo(
+    () => (EMAIL_RE.test(email.trim()) ? suggestEmail(email) : null),
+    [email],
+  );
 
   /** 有實體課本的商品才需要地址 */
   const needsAddress = useMemo(
@@ -217,6 +227,30 @@ export function CheckoutView() {
                     error={shown("email", email)}
                     hint="課程開通通知會寄到這裡"
                   />
+                  {/*
+                    網域錯字提示。這一欄現在是「這個人是誰」的唯一鍵——
+                    帳號用它建、開通信寄到它、之後登入靠它認回訂單。
+                    打錯一個字，客人就會收不到信、登入後看到空的「我的學習」。
+                    刻意不自動改，只問一句由他自己按（長輩看到欄位自己變了會慌）。
+                  */}
+                  {emailSuggestion && (
+                    <div className="mt-[10px] rounded-card border border-sand-400 bg-cream-100 px-[18px] py-[14px]">
+                      <p className="t-body-sm text-brown-700">
+                        你是不是要打{" "}
+                        <strong className="break-all text-brown-900">
+                          {emailSuggestion}
+                        </strong>
+                        ？
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setEmail(emailSuggestion)}
+                        className="mt-[10px] inline-flex min-h-[48px] w-full items-center justify-center rounded-pill border-2 border-sand-400 px-[24px] text-[17px] text-brown-900 hover:bg-[#F5E7CE] sm:w-auto"
+                      >
+                        對，幫我改成這個
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="lg:col-span-2">
                   <Field

@@ -69,10 +69,11 @@ export default async function AdminDashboardPage() {
   const showOrders = can(staff.role, "orders:read");
   const showCatalog = can(staff.role, "catalog:read");
 
-  const [orderStats, catalogStats, sessions] = await Promise.all([
+  const [orderStats, catalogStats, sessions, health] = await Promise.all([
     showOrders ? loadOrderStats(db) : null,
     showCatalog ? loadCatalogStats(db) : null,
     loadUpcomingSessions(db),
+    showOrders ? loadHealthStats(db) : null,
   ]);
 
   return (
@@ -85,6 +86,37 @@ export default async function AdminDashboardPage() {
           你好，{staff.email ?? "同事"}。以下只顯示你權限範圍內的資料。
         </p>
       </div>
+
+      {/* 🔴 需要處理的異常放最上面。
+          「客人付了錢但看不到課」如果沒有一個每天會被看到的地方顯示，
+          就要等客人打 LINE 來罵才會發現。沒有異常時整塊不渲染，
+          免得變成永遠都在的裝飾品而被忽略。 */}
+      {health && (health.unfulfilled > 0 || health.failedEmails > 0) && (
+        <section className="rounded-card border border-danger bg-paper p-4 admin:p-5">
+          <h2 className="text-[16px] font-medium text-danger">需要處理</h2>
+          <ul className="mt-2 flex flex-col gap-2 text-[14px] leading-relaxed text-ink">
+            {health.unfulfilled > 0 && (
+              <li>
+                有 <strong className="text-danger">{health.unfulfilled}</strong>{" "}
+                筆訂單已收款，但線上課還沒有開通 —— 這些客人現在登入是看不到課的。
+                <Link
+                  href="/admin/orders?status=paid"
+                  className="ml-1 text-accent-ink underline"
+                >
+                  去處理
+                </Link>
+              </li>
+            )}
+            {health.failedEmails > 0 && (
+              <li>
+                有 <strong className="text-danger">{health.failedEmails}</strong>{" "}
+                封信重試多次仍寄不出去（訂單通知或設定密碼信）。
+                請確認客人的 Email 是否打錯，或改用 LINE 通知。
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {/* orderStats 只有在 showOrders 時才會是非 null。
           寫成 `showOrders && orderStats.error` 的話 TS 無法把布林值與 null 關聯起來，
@@ -219,6 +251,42 @@ async function loadOrderStats(db: Db | null) {
   } catch (err) {
     console.error("[admin] 訂單統計查詢失敗", err);
     return { ...empty, error: "訂單統計讀取失敗。" };
+  }
+}
+
+/**
+ * 兩個「有沒有人付了錢卻沒拿到東西」的指標。
+ *
+ * 查失敗時回 0 而不是顯示錯誤：這一區只在數字 > 0 時渲染，
+ * 查不到就當作沒事，總覽的其他部分照常運作。失敗會進 log。
+ */
+async function loadHealthStats(db: Db | null) {
+  const empty = { unfulfilled: 0, failedEmails: 0 };
+  if (!db) return empty;
+
+  try {
+    const [unfulfilled, failed] = await Promise.all([
+      db.rpc("count_unfulfilled_paid_orders"),
+      db
+        .from("email_outbox")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "failed"),
+    ]);
+
+    if (unfulfilled.error) {
+      console.error("[admin] 未開通訂單查詢失敗", unfulfilled.error.message);
+    }
+    if (failed.error) {
+      console.error("[admin] 寄信失敗數查詢失敗", failed.error.message);
+    }
+
+    return {
+      unfulfilled: typeof unfulfilled.data === "number" ? unfulfilled.data : 0,
+      failedEmails: failed.count ?? 0,
+    };
+  } catch (err) {
+    console.error("[admin] 健康度統計查詢失敗", err);
+    return empty;
   }
 }
 

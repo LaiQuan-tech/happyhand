@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { after } from "next/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
+import { findOrCreateUser, generateSetupLink } from "@/lib/account/provision";
+import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
+import { accountSetupEmail, orderCreatedEmail } from "@/lib/email/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +18,51 @@ export const dynamic = "force-dynamic";
  * 2. DB 還沒接好（沒有 SUPABASE_SERVICE_ROLE_KEY）或寫入失敗時，不回 500。
  *    照樣發訂單編號、回 persisted: false，讓使用者走完流程（完成頁會請他用 LINE 確認），
  *    server 端 console.error 留下完整內容當作補救依據。
+ * 3. 訂單一定要有主人：已登入就用 session 的 user，否則用客人填的 Email
+ *    自動建帳號（見 lib/account/provision.ts）。綁不上也不擋單，
+ *    由 claim_guest_orders() 與 backfill_order_user_ids() 事後補。
  */
+
+/**
+ * 🔴 這支 API 會用我們的名義寄信給請求裡指定的任意信箱，所以必須有防濫用。
+ *    被腳本跑一輪的後果不只是這個站：寄件網域 gathertaiwan.com 是給樂其他專案
+ *    共用的，信譽燒掉會讓 realreal、gather-landing 的信一起寄不出去，
+ *    連 Supabase Auth 的驗證信也會死。
+ *
+ * 三道閘：
+ *   A. setup 信只在「帳號是這一單新建的」時候寄（既有帳號不寄）
+ *   B. email_outbox.dedupe_key 是 account_setup:<user_id> 且有 unique 約束，
+ *      同一個信箱永遠只會對到同一個 user_id → 這輩子只寄得出一封
+ *   C. 下面這兩道：單一 IP 的頻率，以及全站每小時 setup 信總量的斷路器
+ *
+ * ⚠️ IP 節流是 in-memory 的，Vercel 每個 instance 各有一份，擋得住單機腳本
+ *    但擋不住分散來源。真正的斷路器是 SETUP_EMAIL_HOURLY_CAP（走 DB，跨 instance）。
+ */
+const IP_WINDOW_MS = 10 * 60_000;
+const IP_MAX_ORDERS = 5;
+const SETUP_EMAIL_HOURLY_CAP = 30;
+const ipHits = new Map<string, number[]>();
+
+function tooManyFromIp(ip: string): boolean {
+  if (!ip) return false;
+  const now = Date.now();
+  const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < IP_WINDOW_MS);
+  hits.push(now);
+  ipHits.set(ip, hits);
+
+  // 順手清掉沒在用的鍵，免得 instance 活久了記憶體一直長
+  if (ipHits.size > 5000) {
+    for (const [key, times] of ipHits) {
+      if (times.every((t) => now - t >= IP_WINDOW_MS)) ipHits.delete(key);
+    }
+  }
+  return hits.length > IP_MAX_ORDERS;
+}
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for") ?? "";
+  return forwarded.split(",")[0]?.trim() ?? "";
+}
 
 const PHONE_RE = /^09\d{8}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -68,6 +116,17 @@ function makeOrderNo() {
 }
 
 export async function POST(request: Request) {
+  // 節流放在最前面：擋掉的請求連 JSON 都不用解析。
+  // 429 的文案要給人話＋出口，不能只回一個代碼——真的手滑連按的長輩會看到這句。
+  if (tooManyFromIp(clientIp(request))) {
+    return NextResponse.json(
+      {
+        message: `短時間內送出太多筆訂單了。請等十分鐘再試，或直接用 LINE 找我們：${SITE.lineHref}`,
+      },
+      { status: 429 },
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -164,13 +223,21 @@ export async function POST(request: Request) {
   const price_unverified = lines.some((l) => l.price_unverified);
   const order_no = makeOrderNo();
 
+  // ---------- 3.8 決定訂單的主人 ----------
+  //
+  // session 永遠優先於 Email 查表：人都登入了就用他的身分，
+  // 而且這種情況不寄「設定密碼」信（他早就有密碼了）。
+  const provisioned = supabase ? await resolveOrderOwner(email, name) : null;
+  const userId = provisioned?.userId ?? null;
+
   // ---------- 4. 寫入（失敗不擋使用者） ----------
-  const persisted = supabase
+  const orderId = supabase
     ? await persist(supabase, {
         order_no,
         payment_method,
         total,
         price_unverified,
+        user_id: userId,
         name,
         phone,
         email,
@@ -178,7 +245,25 @@ export async function POST(request: Request) {
         note,
         lines,
       })
-    : false;
+    : null;
+  const persisted = orderId !== null;
+
+  // ---------- 5. 排寄信（不阻塞回應） ----------
+  if (orderId) {
+    after(async () => {
+      await queueOrderEmails({
+        orderId,
+        order_no,
+        email,
+        name,
+        total,
+        payment_method,
+        lines,
+        provisioned,
+      });
+      await flushOutbox();
+    });
+  }
 
   if (!persisted) {
     // 這段 log 就是唯一的補救依據：訂單沒進 DB 時，客服只能靠它把訂單補回來。
@@ -360,6 +445,7 @@ async function persist(
     payment_method: string;
     total: number;
     price_unverified: boolean;
+    user_id: string | null;
     name: string;
     phone: string;
     email: string;
@@ -376,8 +462,13 @@ async function persist(
   };
 
   // 欄位名對照過線上 orders 表（contact_* 而不是 customer_*）
+  //
+  // user_id 一次就寫進去，不做 insert-then-update：中間任何一步失敗都會留下
+  // 一筆沒有主人的訂單，而那正是我們要消滅的狀態。綁不到就是 null，
+  // 交給 claim_guest_orders() / backfill_order_user_ids() 補。
   const rich = {
     ...base,
+    user_id: o.user_id,
     contact_name: o.name,
     contact_phone: o.phone,
     contact_email: o.email,
@@ -437,8 +528,124 @@ async function persist(
       orderId,
       itemsError.message,
     );
-    return false;
+    return null;
   }
 
-  return true;
+  return orderId;
+}
+
+/* ------------------------------------------------------------- 訂單的主人 */
+
+type Provisioned = { userId: string; created: boolean };
+
+/**
+ * 已登入就用 session 的身分；否則用客人填的 Email 找帳號或建一個。
+ *
+ * 回 null 代表這次沒能綁定 —— **訂單照樣要成立**。這一步失敗是自癒的：
+ * claim_guest_orders()（登入即認領）與 backfill_order_user_ids()（worker
+ * 每小時）都會用 contact_email 把它補回來。
+ */
+async function resolveOrderOwner(
+  email: string,
+  name: string,
+): Promise<Provisioned | null> {
+  try {
+    const session = await createClient();
+    const { data } = await session.auth.getUser();
+    if (data.user?.id) {
+      // created: false → 不寄「設定密碼」信。人都登入了，他有密碼。
+      return { userId: data.user.id, created: false };
+    }
+  } catch {
+    // 沒有 cookie 或環境變數不全都會走到這裡，當作訪客往下走
+  }
+
+  return findOrCreateUser(email, name);
+}
+
+/* --------------------------------------------------------------- 排寄信 */
+
+/** 全站每小時的「設定密碼」信上限。跨 instance 的斷路器，見檔頭第 3 段。 */
+async function setupEmailQuotaLeft(): Promise<boolean> {
+  try {
+    const db = createServiceClient();
+    const since = new Date(Date.now() - 60 * 60_000).toISOString();
+    const { count, error } = await db
+      .from("email_outbox")
+      .select("id", { count: "exact", head: true })
+      .like("dedupe_key", "account_setup:%")
+      .gte("created_at", since);
+
+    if (error) {
+      // 查不到就保守放行：這道閘是斷路器不是主要防線（主要防線是 dedupe_key
+      // 的 unique），因為查詢失敗就完全不寄信，代價比較大。
+      console.error("[orders] setup 信配額查詢失敗，這次放行", error.message);
+      return true;
+    }
+    if ((count ?? 0) >= SETUP_EMAIL_HOURLY_CAP) {
+      console.error(
+        `[orders] 🔴 一小時內已排入 ${count} 封設定密碼信，超過上限 ${SETUP_EMAIL_HOURLY_CAP}，暫停寄送。請檢查是否被濫用。`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[orders] setup 信配額例外，這次放行", err);
+    return true;
+  }
+}
+
+async function queueOrderEmails(input: {
+  orderId: string;
+  order_no: string;
+  email: string;
+  name: string;
+  total: number;
+  payment_method: string;
+  lines: Line[];
+  provisioned: Provisioned | null;
+}) {
+  // 1. 訂單成立通知
+  await enqueueEmail({
+    dedupeKey: `order_created:${input.orderId}`,
+    ...orderCreatedEmail({
+      to: input.email,
+      name: input.name,
+      orderNo: input.order_no,
+      total: input.total,
+      paymentMethod: input.payment_method,
+      items: input.lines.map((l) => ({ title: l.title, qty: l.qty })),
+    }),
+  });
+
+  // 2. 設定密碼信 —— 只在帳號是這一單新建的時候寄（閘 A）
+  if (!input.provisioned?.created) return;
+
+  // SETUP_EMAIL_ON=paid 可以把這封信改成「客服標記收款時才寄」。
+  // 那等於把寄信放進客服的迴圈裡，濫用可能性歸零，是出事當天的緊急開關。
+  if ((process.env.SETUP_EMAIL_ON ?? "order") !== "order") return;
+
+  if (!(await setupEmailQuotaLeft())) return;
+
+  const link = await generateSetupLink(input.email);
+  if (!link) return;
+
+  const orderDate = new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
+
+  await enqueueEmail({
+    // 綁 user_id 而不是 order_id：同一個人第二次下單不該再收一次設定密碼信。
+    // 這個 unique 鍵就是閘 B。
+    dedupeKey: `account_setup:${input.provisioned.userId}`,
+    ...accountSetupEmail({
+      to: input.email,
+      name: input.name,
+      link,
+      orderNo: input.order_no,
+      orderDate,
+    }),
+  });
 }
