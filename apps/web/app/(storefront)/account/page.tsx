@@ -56,25 +56,28 @@ export default async function AccountHomePage() {
       {error ? (
         <LoadError message={error} />
       ) : courses.length === 0 ? (
-        <EmptyState
-          title="您還沒有課程。"
-          action={
-            <div className="flex flex-col items-center gap-[12px] sm:flex-row sm:justify-center">
-              <Link
-                href="/courses"
-                className={buttonClass({ variant: "primary", size: "lg" })}
-              >
-                點這裡看看有哪些課 →
-              </Link>
-            </div>
-          }
-        >
-          <p>
+        // 兩個出口的順序有意義：先給「去買課」（多數人來到這裡的原因），
+        // 再處理「我明明買了」（少數但很急的那群）。
+        // EmptyState 的 children 排在 action 前面，所以主 CTA 要放 children 裡。
+        <EmptyState title="您還沒有課程。">
+          <Link
+            href="/courses"
+            className={buttonClass({
+              variant: "primary",
+              size: "lg",
+              fullWidth: true,
+              className: "mt-[6px] sm:w-auto",
+            })}
+          >
+            點這裡看看有哪些課 →
+          </Link>
+
+          <p className="mt-[24px] border-t border-sand-300 pt-[20px]">
             如果你買過課卻看不到，可能是登入的信箱跟下單時填的不一樣。
             <br className="hidden sm:block" />
             用 LINE 跟我們說一聲，報你的名字就好，我們幫你查。
           </p>
-          <div className="mt-[16px]">
+          <div className="mt-[14px]">
             <LineButton label="買了課卻看不到？問我們" />
           </div>
         </EmptyState>
