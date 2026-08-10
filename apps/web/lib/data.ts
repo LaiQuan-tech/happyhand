@@ -25,6 +25,7 @@ export type ProductWithSessions = Product & {
 };
 
 type LessonRow = {
+  id?: string;
   title: string;
   duration_sec: number;
   free_preview: boolean;
@@ -42,7 +43,7 @@ export async function getProducts(): Promise<ProductWithSessions[]> {
       .from("products")
       // 一併撈單元：舊版的 mapProduct() 寫死 lessons 取自靜態檔，
       // 導致列表頁的「共 N 堂」永遠不受資料庫控制。
-      .select(`${PRODUCT_SELECT}, course_lessons(title, duration_sec, free_preview, sort_order)`)
+      .select(`${PRODUCT_SELECT}, course_lessons(id, title, duration_sec, free_preview, sort_order)`)
       .eq("is_published", true)
       .order("sort_order", { ascending: true });
 
@@ -66,7 +67,7 @@ export async function getProduct(
     const { data, error } = await supabase
       .from("products")
       .select(
-        `${PRODUCT_SELECT}, course_lessons(title, duration_sec, free_preview, sort_order), workshop_sessions(*)`,
+        `${PRODUCT_SELECT}, course_lessons(id, title, duration_sec, free_preview, sort_order), workshop_sessions(*)`,
       )
       .eq("slug", slug)
       .eq("is_published", true)
@@ -168,6 +169,7 @@ function mapProduct(row: Record<string, unknown>): ProductWithSessions {
     .slice()
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((l) => ({
+      id: l.id,
       title: l.title,
       duration_sec: l.duration_sec,
       free_preview: l.free_preview,

@@ -287,7 +287,14 @@ export function LessonPlayer({
 
   return (
     <div>
-      <div className="relative aspect-video w-full overflow-hidden rounded-card bg-brown-900">
+      {/*
+        [&_iframe]:… 是必要的，不是保險：
+        new YT.Player(div) 會把掛載的 <div> **整個換成** 一個 <iframe>，
+        而那個 iframe 帶的是 YouTube 自己的 width/height 屬性（預設 640×390），
+        不會繼承我們給 div 的 class。不強制撐滿的話播放器會縮在角落，
+        四周露出一圈深色底。
+      */}
+      <div className="relative aspect-video w-full overflow-hidden rounded-card bg-brown-900 [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full">
         {state.kind === "ready" ? (
           <>
             <div ref={mountRef} className="h-full w-full" />

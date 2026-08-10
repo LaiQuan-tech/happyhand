@@ -42,14 +42,20 @@ export function isDryRun(): boolean {
   return !process.env.RESEND_API_KEY;
 }
 
-/** 遮罩收件者，log 裡不留完整 Email。 */
+/**
+ * 遮罩 Email。log 與上課教室的浮水印共用。
+ *
+ * 星號數量固定，不跟著原本的長度走：一來長度本身也是一點資訊，
+ * 二來浮水印用的就是這支，`a****************@gmail.com` 那種一長串很難看。
+ */
 export function maskEmail(email: string): string {
   const at = email.indexOf("@");
   if (at <= 0) return "***";
   const name = email.slice(0, at);
   const domain = email.slice(at);
-  const head = name.slice(0, 1);
-  return `${head}${"*".repeat(Math.max(1, name.length - 1))}${domain}`;
+  // 兩碼以上的帳號留前兩碼比較認得出是誰，只有一碼的就留一碼
+  const head = name.slice(0, name.length > 1 ? 2 : 1);
+  return `${head}***${domain}`;
 }
 
 export async function sendEmail(message: EmailMessage): Promise<SendResult> {

@@ -7,6 +7,8 @@
 export type ProductType = "course" | "workshop" | "subscription";
 
 export type Lesson = {
+  /** course_lessons.id。免費試看的播放器需要它去換影片 ID。 */
+  id?: string;
   title: string;
   duration_sec: number;
   free_preview?: boolean;
