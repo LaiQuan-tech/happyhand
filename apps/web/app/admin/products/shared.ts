@@ -79,7 +79,8 @@ export type LessonRow = {
   id: string;
   title: string;
   duration_sec: number | null;
-  video_path: string | null;
+  /** YouTube 影片 ID（11 碼）。影片改放 YouTube 之後 video_path 已停用。 */
+  youtube_id: string | null;
   free_preview: boolean;
   sort_order: number;
 };

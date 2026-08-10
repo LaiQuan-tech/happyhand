@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireCapability, adminErrorMessage } from "@/lib/admin/guard";
 import { writeAudit, diffOf } from "@/lib/admin/audit";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseYouTubeId } from "@/lib/youtube";
 import { taipeiLocalToIso, formatTaipei } from "@/components/admin/datetime-field";
 import { applyLessonPlan, planLessonWrites, type SubmittedLesson } from "./lesson-plan";
 import { checkProductDeletable, checkSessionDeletable, type CountClient } from "./guards";
@@ -424,6 +425,23 @@ export async function saveLessons(
       if (!title) {
         return { error: `第 ${i + 1} 個單元沒有填標題。` };
       }
+
+      // 員工貼的是整條 YouTube 網址（他們不會知道什麼叫「影片 ID」），
+      // 存進資料庫的是 11 碼 ID。
+      //
+      // ⚠️ 認不出來的字串**不要默默當成沒填**。那會變成
+      //    「後台看起來有填、學員點播放卻說沒有影片」，而且沒有人查得出原因。
+      //    寧可擋下整次儲存並回一句人話。
+      const rawUrl = String(formData.get(`lessons.${i}.youtube_url`) ?? "").trim();
+      const youtubeId = rawUrl ? parseYouTubeId(rawUrl) : null;
+      if (rawUrl && !youtubeId) {
+        return {
+          error:
+            `第 ${i + 1} 個單元的 YouTube 網址看不懂：「${rawUrl.slice(0, 60)}」。` +
+            "請從 YouTube 影片頁的網址列整條複製過來（watch?v=、youtu.be 都可以）。",
+        };
+      }
+
       submitted.push({
         id: String(formData.get(`lessons.${i}.id`) ?? "").trim(),
         title: title.slice(0, 200),
@@ -431,10 +449,7 @@ export async function saveLessons(
           String(formData.get(`lessons.${i}.min`) ?? ""),
           String(formData.get(`lessons.${i}.sec`) ?? ""),
         ),
-        video_path: (() => {
-          const raw = String(formData.get(`lessons.${i}.video_path`) ?? "").trim();
-          return raw ? raw.slice(0, 500) : null;
-        })(),
+        youtube_id: youtubeId,
         free_preview: formData.get(`lessons.${i}.free_preview`) === "on",
       });
     }

@@ -43,7 +43,7 @@ export type SubmittedLesson = {
   id: string;
   title: string;
   duration_sec: number | null;
-  video_path: string | null;
+  youtube_id: string | null;
   free_preview: boolean;
 };
 
@@ -57,7 +57,7 @@ export type LessonPlan = {
     id: string;
     title: string;
     duration_sec: number | null;
-    video_path: string | null;
+    youtube_id: string | null;
     free_preview: boolean;
     sort_order: number;
   }[];
@@ -65,7 +65,7 @@ export type LessonPlan = {
   insert: {
     title: string;
     duration_sec: number | null;
-    video_path: string | null;
+    youtube_id: string | null;
     free_preview: boolean;
     sort_order: number;
   }[];
@@ -116,7 +116,7 @@ export function planLessonWrites(
     const payload = {
       title: row.title,
       duration_sec: row.duration_sec,
-      video_path: row.video_path,
+      youtube_id: row.youtube_id,
       free_preview: row.free_preview,
       sort_order: sortOrder,
     };
@@ -199,7 +199,7 @@ export async function applyLessonPlan(
       .update({
         title: row.title,
         duration_sec: row.duration_sec,
-        video_path: row.video_path,
+        youtube_id: row.youtube_id,
         free_preview: row.free_preview,
         sort_order: row.sort_order,
       })

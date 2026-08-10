@@ -92,7 +92,7 @@ export default async function AdminProductEditPage({
     const [lessonResult, sessionResult] = await Promise.all([
       db
         .from("course_lessons")
-        .select("id, title, duration_sec, video_path, free_preview, sort_order")
+        .select("id, title, duration_sec, youtube_id, free_preview, sort_order")
         .eq("product_id", id)
         .order("sort_order", { ascending: true }),
       db

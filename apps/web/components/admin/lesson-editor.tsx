@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveLessons, type LessonSaveState } from "@/app/admin/products/actions";
 import { splitDuration, type LessonRow } from "@/app/admin/products/shared";
+import { youTubeWatchUrl } from "@/lib/youtube";
 import {
   AdminFieldLabel,
   adminBorderClass,
@@ -43,7 +44,8 @@ type Row = {
   title: string;
   min: number;
   sec: number;
-  videoPath: string;
+  /** 完整的 YouTube 網址（存的是 11 碼 ID，這裡回填成網址方便同事點開確認） */
+  youtubeUrl: string;
   freePreview: boolean;
 };
 
@@ -55,7 +57,7 @@ function toRow(lesson: LessonRow): Row {
     title: lesson.title,
     min,
     sec,
-    videoPath: lesson.video_path ?? "",
+    youtubeUrl: lesson.youtube_id ? youTubeWatchUrl(lesson.youtube_id) : "",
     freePreview: lesson.free_preview,
   };
 }
@@ -69,7 +71,7 @@ function blankRow(): Row {
     title: "",
     min: 0,
     sec: 0,
-    videoPath: "",
+    youtubeUrl: "",
     freePreview: false,
   };
 }
@@ -209,16 +211,33 @@ export function LessonEditor({
 
                 <div className="admin:col-span-2">
                   <AdminFieldLabel htmlFor={`lesson-video-${row.rowKey}`}>
-                    影片路徑
+                    YouTube 影片網址
                   </AdminFieldLabel>
                   <input
                     id={`lesson-video-${row.rowKey}`}
-                    name={`lessons.${index}.video_path`}
-                    defaultValue={row.videoPath}
+                    name={`lessons.${index}.youtube_url`}
+                    defaultValue={row.youtubeUrl}
                     maxLength={500}
+                    inputMode="url"
                     placeholder="留空代表還沒上片"
+                    aria-describedby={`lesson-video-hint-${row.rowKey}`}
                     className={`${adminControlClass} ${adminControlHeight} ${adminBorderClass()}`}
                   />
+                  {/* 這一段是給上片的同事看的，不是裝飾。
+                      影片設成「公開」的話搜尋得到，付費內容等於免費送；
+                      設成「私人」則無法嵌入，學員一定看不到。
+                      沒有任何程式碼檢查得到這件事，只能靠寫在他眼前。 */}
+                  <p
+                    id={`lesson-video-hint-${row.rowKey}`}
+                    className="mt-1.5 text-[13px] leading-relaxed text-ink-soft"
+                  >
+                    整條網址貼上來就好（watch?v=、youtu.be、shorts 都可以）。
+                    <br />
+                    <strong className="text-danger">
+                      影片在 YouTube 上必須設成「不公開」
+                    </strong>
+                    ——設成「公開」的話任何人搜尋得到，設成「私人」的話學員會看不到。
+                  </p>
                 </div>
 
                 <label
