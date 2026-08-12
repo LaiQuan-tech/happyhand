@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/components/cart-provider";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button, LinkButton, buttonClass } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Figure } from "@/components/ui/placeholder";
@@ -36,6 +38,65 @@ export function CheckoutView() {
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+
+  /**
+   * 已登入的人不用重打資料。
+   *
+   * 刻意在 client 端抓而不是讓 /checkout 變成 server component：
+   * 這頁現在是靜態的（○ /checkout），為了少數已登入的人把所有人都變成
+   * 每次連線都查一次資料庫並不划算。晚個幾百毫秒才帶入完全可以接受。
+   *
+   * 只填「還是空的」欄位——使用者已經動手打過的東西絕對不覆蓋。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, phone")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+
+        let touched = false;
+        if (user.email) {
+          setEmail((v) => {
+            if (v) return v;
+            touched = true;
+            return user.email!;
+          });
+        }
+        if (profile?.full_name) {
+          setName((v) => {
+            if (v) return v;
+            touched = true;
+            return profile.full_name as string;
+          });
+        }
+        if (profile?.phone) {
+          setPhone((v) => {
+            if (v) return v;
+            touched = true;
+            return profile.phone as string;
+          });
+        }
+        if (touched) setPrefilled(true);
+      } catch {
+        // 沒登入、環境變數不全、網路壞掉都走這裡。訪客結帳照常運作。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const formRef = useRef<HTMLFormElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
@@ -190,6 +251,15 @@ export function CheckoutView() {
               <h2 className="font-serif text-[22px] font-semibold text-brown-900 md:text-[28px]">
                 你的資料
               </h2>
+
+              {prefilled && (
+                <p
+                  role="status"
+                  className="mt-[12px] rounded-card bg-cream-100 px-[18px] py-[12px] text-[16.5px] leading-[1.8] text-brown-700"
+                >
+                  你已經登入了，資料先幫你帶進來。不對的話可以直接改。
+                </p>
+              )}
 
               <div className="mt-[20px] grid gap-[16px] lg:grid-cols-2 lg:gap-[20px]">
                 <Field
@@ -347,8 +417,18 @@ export function CheckoutView() {
                 {busy ? "處理中…" : "確認送出訂單"}
               </Button>
 
+              {/* 這句話原本是純文字，而且那份條款根本不存在——
+                  等於要客人同意一份看不到的東西。連到 /terms。 */}
               <p className="mt-[14px] text-center text-[16px] leading-[1.8] text-brown-300">
-                送出即表示同意服務條款與退費規定
+                送出即表示同意
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="-my-[7px] inline-block py-[11px] text-brown-500 underline underline-offset-4 hover:text-caramel-dk"
+                >
+                  服務條款與退費規定
+                  <span className="sr-only">（會開新分頁）</span>
+                </Link>
               </p>
 
               <div className="mt-[16px] border-t border-sand-300 pt-[16px]">

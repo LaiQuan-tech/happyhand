@@ -93,6 +93,37 @@ export default async function CheckoutSuccessPage({
             </div>
           )}
 
+          {/*
+            🔴 這一段是下單到上課之間最容易斷掉的地方。
+
+            系統已經用客人填的 Email 幫他開好帳號並寄了「設定密碼」信，
+            但如果這一頁不講，他按下面的「看我的學習」就會被丟到登入頁——
+            然後他不知道自己有帳號、也不知道密碼，整條路就卡死在這裡。
+            對 60–75 歲客群這一步不能靠猜。
+          */}
+          <section
+            aria-labelledby="account-ready"
+            className="mt-[24px] rounded-card border-2 border-sand-400 bg-white px-[24px] py-[26px] md:mt-[32px] md:px-[32px] md:py-[34px]"
+          >
+            <h2
+              id="account-ready"
+              className="font-serif text-[20px] font-semibold text-brown-900 md:text-[22px]"
+            >
+              我們幫你開好帳號了
+            </h2>
+            <p className="mt-[12px] text-[16.5px] leading-[1.9] text-brown-700 md:text-[17.5px]">
+              我們已經寄了一封
+              <strong className="font-semibold text-brown-900">「請設定密碼」</strong>
+              的信到你剛剛填的信箱。打開信、按裡面那顆按鈕設定一組密碼，
+              之後就能登入看你買的課程和訂單。
+            </p>
+            <p className="mt-[10px] text-[16px] leading-[1.9] text-brown-500">
+              ・沒收到的話，先看看「垃圾郵件」那一夾，信可能要等一兩分鐘。
+              <br />
+              ・不想現在設定也沒關係，課程開通之後我們會再寄一次通知。
+            </p>
+          </section>
+
           <section
             aria-labelledby="next-steps"
             className="mt-[24px] rounded-card bg-cream-100 px-[24px] py-[26px] md:mt-[24px] md:px-[32px] md:py-[34px]"
@@ -105,7 +136,7 @@ export default async function CheckoutSuccessPage({
             </h2>
             <ol className="mt-[16px] flex flex-col gap-[12px] text-[16.5px] leading-[1.9] text-brown-700 md:mt-[18px] md:gap-[14px] md:text-[17.5px]">
               <li>
-                一、線上課程：我們開通之後，你登入就能在「我的課程」裡看，想看幾次都可以。
+                一、線上課程：我們開通之後，你登入就能在「我的學習」裡看，想看幾次都可以。
               </li>
               <li>
                 二、實體工作坊：開課前三天我們會再提醒你一次，當天空手來就好。
@@ -131,7 +162,7 @@ export default async function CheckoutSuccessPage({
               size="lg"
               className="w-full sm:w-auto"
             >
-              看我的課程
+              看我的學習
             </LinkButton>
           </div>
 

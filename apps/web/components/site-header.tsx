@@ -26,6 +26,24 @@ function CartIcon({ className = "" }: { className?: string }) {
   );
 }
 
+/** 會員圖示。窄桌機（768–1279）放不下「我的學習」四個字時用它代替。 */
+function MemberIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H10a3 3 0 0 1 2 .8A3 3 0 0 1 14 4h5.5A1.5 1.5 0 0 1 21 5.5v12a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 0 0-2 1 2 2 0 0 0-2-1H4.5A1.5 1.5 0 0 1 3 17.5v-12ZM12 6.8V19" />
+    </svg>
+  );
+}
+
 function Wordmark({ heightClass }: { heightClass: string }) {
   return (
     <Image
@@ -42,6 +60,16 @@ function Wordmark({ heightClass }: { heightClass: string }) {
     />
   );
 }
+
+/**
+ * 桌機導覽連結。
+ *
+ * min-h-[44px] 不是為了滑鼠，是為了平板：md 斷點是 768px，
+ * 所以 iPad 直向（768）與橫向（1024）拿到的都是這一組「桌機」導覽，
+ * 而它們是觸控裝置。原本這幾個連結只有 27px 高，手指很難點準。
+ */
+const navLinkClass =
+  "flex min-h-[44px] items-center hover:text-caramel-dk";
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
@@ -76,29 +104,71 @@ export function SiteHeader() {
      */
     <>
       <header className="sticky top-0 z-50 border-b border-sand-300 bg-white/96 backdrop-blur-sm">
-        {/* 桌機：置中對稱 */}
-        <nav
-          aria-label="主選單"
-          className="mx-auto hidden max-w-maxw items-center justify-center gap-[40px] px-[40px] py-[22px] text-[18px] whitespace-nowrap text-brown-700 md:flex"
-        >
-          {NAV_LINKS.slice(0, 2).map((l) => (
-            <Link key={l.href} href={l.href} className="hover:text-caramel-dk">
-              {l.label}
-            </Link>
-          ))}
-          <Link
-            href="/"
-            aria-label="快樂手 首頁"
-            className="flex min-h-[44px] items-center"
+        {/* 桌機：置中對稱的導覽 + 靠右的功能區 */}
+        <div className="relative mx-auto hidden max-w-maxw md:block">
+          {/* gap 在 md（768–1279）收窄：那個區間要同時放下五個導覽項目與右邊的
+              功能區，用 40px 的話「聯絡我們」會被壓在「我的學習」底下。 */}
+          <nav
+            aria-label="主選單"
+            className="flex items-center justify-center gap-[22px] px-[40px] py-[22px] text-[18px] whitespace-nowrap text-brown-700 lg:gap-[40px]"
           >
-            <Wordmark heightClass="h-[34px]" />
-          </Link>
-          {NAV_LINKS.slice(2).map((l) => (
-            <Link key={l.href} href={l.href} className="hover:text-caramel-dk">
-              {l.label}
+            {NAV_LINKS.slice(0, 2).map((l) => (
+              <Link key={l.href} href={l.href} className={navLinkClass}>
+                {l.label}
+              </Link>
+            ))}
+            <Link
+              href="/"
+              aria-label="快樂手 首頁"
+              className="flex min-h-[44px] items-center"
+            >
+              <Wordmark heightClass="h-[34px]" />
             </Link>
-          ))}
-        </nav>
+            {NAV_LINKS.slice(2).map((l) => (
+              <Link key={l.href} href={l.href} className={navLinkClass}>
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/*
+            ⚠️ 這一組原本只存在於手機版，桌機完全沒有——
+            結果是桌機使用者把課加進購物車、離開商品頁之後就再也找不到結帳入口，
+            買完課也沒有任何地方進得了「我的學習」（只能自己打網址）。
+
+            用絕對定位而不是把它塞進 nav 裡：設計稿的桌機版是
+            「兩個連結｜字標｜兩個連結」的置中對稱，加進去會把字標推歪。
+            這樣視覺維持對稱，功能補回來。
+          */}
+          <div className="absolute inset-y-0 right-[40px] flex items-center gap-[6px]">
+            {/* md（768–1279）只放圖示，lg 以上才顯示文字：
+                那個區間的水平空間不夠同時容納五個導覽項目與兩組文字。
+                圖示模式一律靠 aria-label 交代語意，不是只留一個沒名字的圖形。 */}
+            <Link
+              href="/account"
+              aria-label="我的學習"
+              className="flex h-[44px] items-center justify-center rounded-input text-[17px] whitespace-nowrap text-brown-700 hover:text-caramel-dk max-lg:w-[44px] lg:px-[12px]"
+            >
+              <MemberIcon className="h-[23px] w-[23px] lg:hidden" />
+              <span className="max-lg:hidden">我的學習</span>
+            </Link>
+            <Link
+              href="/cart"
+              aria-label={count > 0 ? `購物車，${count} 件` : "購物車，目前是空的"}
+              className="relative flex h-[44px] w-[44px] items-center justify-center rounded-input text-brown-700 hover:text-caramel-dk"
+            >
+              <CartIcon className="h-[23px] w-[23px]" />
+              {count > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute top-[2px] right-[2px] min-w-[19px] rounded-pill bg-caramel-dk px-[5px] text-center text-[12px] leading-[19px] text-white"
+                >
+                  {count}
+                </span>
+              )}
+            </Link>
+          </div>
+        </div>
 
         {/* 手機：三欄 */}
         <div className="flex items-center justify-between px-[16px] py-[12px] md:hidden">
@@ -209,7 +279,9 @@ export function SiteHeader() {
                     onClick={() => setOpen(false)}
                     className="flex min-h-[58px] items-center text-[19px] text-brown-900"
                   >
-                    我的課程
+                    {/* 用詞跟會員中心的標題對齊。全站有三個地方寫「我的課程」、
+                        會員中心卻叫「我的學習」，長輩會以為是兩個不同的東西。 */}
+                    我的學習
                   </Link>
                 </li>
                 <li className="border-b border-sand-300">

@@ -48,6 +48,24 @@ export function SiteFooter() {
                 品牌介紹
               </Link>
             </li>
+            {/* 買過課的人回來時要找得到入口。原本全站只有手機版抽屜有，
+                桌機使用者只能自己打網址。 */}
+            <li>
+              <Link
+                href="/account"
+                className="flex min-h-[44px] items-center text-[17px] text-brown-500 hover:text-caramel-dk"
+              >
+                我的學習
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/terms"
+                className="flex min-h-[44px] items-center text-[17px] text-brown-500 hover:text-caramel-dk"
+              >
+                服務條款與退費規定
+              </Link>
+            </li>
           </ul>
         </nav>
 
