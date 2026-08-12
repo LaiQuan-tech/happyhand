@@ -41,6 +41,8 @@ export type MyCourse = {
   expiresAt: string | null;
   /** 已經過期。仍然顯示，但不給進教室（誠實勝過讓他點進去看到空白）。 */
   expired: boolean;
+  /** products.type。訂閱制沒有影片單元，卡片要講不一樣的話。 */
+  type: string;
   totalLessons: number;
   completedLessons: number;
   /** 上次看到哪一堂（用來做「繼續上課」）。全新的課是 null。 */
@@ -145,6 +147,7 @@ export async function getMyCourses(): Promise<MyCoursesResult> {
           title: product.title,
           subtitle: product.subtitle,
           coverUrl: product.cover_url,
+          type: product.type,
           expiresAt,
           expired: expiresAt !== null && new Date(expiresAt).getTime() < now,
           totalLessons: mine.length,

@@ -111,6 +111,11 @@ export default async function AccountHomePage() {
  * 讀百分比則完全沒有「還剩多少」的體感。完整句子最直接。
  */
 function progressSentence(course: MyCourse): string {
+  // 訂閱制（例如「24 節氣年度陪伴計畫」）本來就沒有影片單元，內容是寄信給你的。
+  // 套用「課程內容準備中」會讓客人以為東西還沒做好、跑來問什麼時候開課。
+  if (course.type === "subscription") {
+    return "這是訂閱制的陪伴計畫，內容會依節氣寄到你的信箱，不用來這裡看。";
+  }
   if (course.totalLessons === 0) return "課程內容準備中，開課我們會用 LINE 通知你。";
   if (course.completedLessons === 0) return `這門課有 ${course.totalLessons} 堂，還沒開始。`;
   const left = course.totalLessons - course.completedLessons;
@@ -174,6 +179,10 @@ function CourseCard({ course }: { course: MyCourse }) {
               </Link>
             ) : course.expired ? (
               <LineButton label="想繼續看？跟我們說" />
+            ) : course.type === "subscription" ? (
+              <p className="t-body-sm text-brown-500">
+                有問題或想調整寄送方式，用 LINE 跟我們說就好。
+              </p>
             ) : (
               <p className="t-body-sm text-brown-500">
                 內容準備好我們會用 LINE 通知你。
