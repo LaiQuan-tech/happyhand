@@ -10,8 +10,13 @@ import "server-only";
  *    改這支的時候記得看一眼那一支，反之亦然。
  *
  * 寄件人用 noreply@gathertaiwan.com：Resend 帳號裡只有 gathertaiwan.com 與
- * realreal.cc 兩個網域通過驗證，happyhands.tw 根本沒登記（那個網域連 Vercel
- * 都還沒掛）。Supabase Auth 現在寄驗證信也是用這個位址，寄得出去。
+ * realreal.cc 兩個網域通過驗證。Supabase Auth 現在寄驗證信也是用這個位址。
+ *
+ * ⚠️ 站的網域是 happyhands.com.tw，但**不要**直接把寄件人改成
+ *    @happyhands.com.tw —— 那個網域的 MX 指向 Google Workspace（客戶公司信箱
+ *    在上面），要拿它寄信得先在 Resend 完成網域驗證並加 DKIM/SPF 紀錄，而
+ *    現有的 SPF 已經有一筆 include，加錯會連客戶自己寄信都被判垃圾郵件。
+ *    在那之前，寄件人與網站網域不同是正常的、也寄得出去。
  */
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";

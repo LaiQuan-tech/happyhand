@@ -14,7 +14,11 @@ export interface WorkerEnv {
   supabaseServiceRoleKey: string;
   /** Resend API key；沒有設定 = 提醒信只記 log 不寄出（dry run） */
   resendApiKey: string | null;
-  /** 寄件人，例如：快樂手 <no-reply@happyhands.tw> */
+  /**
+   * 寄件人。預設用 noreply@gathertaiwan.com —— 那是 Resend 帳號裡少數通過
+   * 驗證的網域之一。站的網域雖然是 happyhands.com.tw，但它還沒在 Resend
+   * 驗證過，拿來當寄件人會被退信。
+   */
   mailFrom: string;
   /** 寄信失敗或需要人工處理時的內部通知信箱（目前僅用於信件 reply-to） */
   mailReplyTo: string | null;
@@ -108,7 +112,10 @@ export function loadEnv(): WorkerEnv {
     supabaseUrl: url,
     supabaseServiceRoleKey: key,
     resendApiKey,
-    mailFrom: readString("MAIL_FROM") ?? "快樂手 <no-reply@happyhands.tw>",
+    // 與 apps/web/lib/email/resend.ts 的 MAIL_FROM 預設值保持一致，改一邊要改兩邊。
+    mailFrom:
+      readString("MAIL_FROM") ??
+      "快樂手 Happy Healing Hands <noreply@gathertaiwan.com>",
     mailReplyTo: readString("MAIL_REPLY_TO"),
     port: readPort(3001),
     timezone: TIMEZONE,

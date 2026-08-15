@@ -64,10 +64,19 @@ file_size_limit = "500MiB"
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"
+# ⚠️ 這一段只影響本機 `supabase start`。正式站的 Site URL 與 Redirect URLs 在
+#    Dashboard（Authentication → URL Configuration），改這裡**不會**同步上去，
+#    兩邊要各改一次。漏掉正式站那邊的症狀是：登入信、設定密碼信點下去被導回
+#    localhost，客人看到「無法連上這個網站」。
+#
+# 正式網域是 happyhands.com.tw（happyhands.tw 沒註冊過，不要再寫那個）。
+# 用 /** 結尾是因為 auth 連結會帶路徑（/auth/confirm、/reset-password），
+# 只放行裸網域的話帶路徑的 redirect 會被擋掉。
 additional_redirect_urls = [
   "http://127.0.0.1:3000",
   "http://localhost:3000",
-  "https://happyhands.tw",
+  "https://happyhands.com.tw/**",
+  "https://www.happyhands.com.tw/**",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true

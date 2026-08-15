@@ -1,6 +1,19 @@
 /** 公司與品牌資訊 — 來源：design_handoff_happyhands/CONTENT.md，請照抄不要改寫 */
 export const SITE = {
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://happyhands.tw",
+  /**
+   * 正式網域是 happyhands.com.tw（**不是** happyhands.tw —— 那個網域從來沒
+   * 註冊過，DNS 查不到 NS，之前寫在這裡是錯的）。
+   *
+   * ⚠️ 這個值不只影響 SEO。它同時是：
+   *    - layout.tsx 的 metadataBase（og:url、canonical）
+   *    - lib/account/provision.ts 組「設定密碼」信連結的基底
+   *    - lib/email/templates.ts 裡「我的學習」按鈕的連結
+   *    寫錯的話客人收到信、點了連結會打不開，而站上完全看不出異常。
+   *
+   * Vercel 上有設 NEXT_PUBLIC_SITE_URL 會蓋掉這裡的預設值，**換網域時那邊要
+   * 一起改**，否則信裡的連結會繼續指向舊的 vercel.app 網址。
+   */
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://happyhands.com.tw",
   brandZh: "快樂手",
   brandEn: "HAPPY HEALING HANDS",
   company: "好日子股份有限公司",
