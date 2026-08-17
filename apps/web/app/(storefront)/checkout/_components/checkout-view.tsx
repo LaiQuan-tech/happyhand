@@ -195,6 +195,7 @@ export function CheckoutView() {
       const data = (await res.json().catch(() => null)) as {
         order_no?: string;
         message?: string;
+        payment_url?: string | null;
       } | null;
 
       if (!res.ok || !data?.order_no) {
@@ -204,6 +205,18 @@ export function CheckoutView() {
       // 先擋掉「購物車是空的」那段，再清空，避免導頁途中閃出提示
       setLeaving(true);
       clear();
+
+      // 選了刷卡而且金流也開好單了，就直接把人帶去黑貓 PAY 的刷卡頁。
+      // 用 location.assign 不用 router.push —— 那是站外網址，Next 的 router 不處理。
+      //
+      // 沒有 payment_url 的情況照原本的路走到完成頁：可能是選了「LINE 轉帳」，
+      // 也可能是金流建單失敗。完成頁本來就會告訴客人怎麼用 LINE 完成付款，
+      // 所以這裡不需要（也不應該）跳錯誤給他看。
+      if (payment === "credit" && data.payment_url) {
+        window.location.assign(data.payment_url);
+        return;
+      }
+
       router.push(
         `/checkout/success?order=${encodeURIComponent(data.order_no)}&pay=${payment}`,
       );

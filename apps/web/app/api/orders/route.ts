@@ -5,6 +5,7 @@ import { SITE } from "@/lib/site";
 import { findOrCreateUser, generateSetupLink } from "@/lib/account/provision";
 import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
 import { accountSetupEmail, orderCreatedEmail } from "@/lib/email/templates";
+import { createCreditOrder, isBlackcatConfigured } from "@/lib/payment/blackcat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -280,7 +281,54 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ order_no, total, persisted, price_unverified });
+  // ---------- 6. 線上刷卡：跟黑貓 PAY 要一個付款網址 ----------
+  //
+  // 這一步**必須同步等**：客人要拿到 payment_url 才付得了錢。正常 1~2 秒。
+  // 失敗不擋單 —— 訂單已經是 pending 存在資料庫裡，完成頁會請他用 LINE 聯絡，
+  // 客服也能在後台看到這筆。跟本檔案開頭「DB 失敗不回 500」是同一個原則：
+  // 寧可讓人工補救，也不要讓客人在結帳最後一步看到錯誤。
+  let payment_url: string | null = null;
+  if (orderId && payment_method === "credit" && isBlackcatConfigured()) {
+    const detail =
+      lines.map((l) => `${l.title} x${l.qty}`).join("、") || "快樂手線上課程";
+    const created = await createCreditOrder({
+      orderNo: order_no,
+      amount: total,
+      detail,
+      apnUrl: `${SITE.url}/api/payments/blackcat/apn`,
+      successUrl: `${SITE.url}/api/payments/blackcat/return`,
+    });
+
+    if (created.ok) {
+      payment_url = created.url;
+      // supabase 在沒設 service role key 時是 null；有 orderId 就一定有它，
+      // 但 TS 不知道，而且這裡也不值得為了省一個判斷去斷言。
+      const { error } = supabase
+        ? await supabase
+            .from("orders")
+            .update({
+              payment_provider: "blackcat",
+              payment_url: created.url,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", orderId)
+        : { error: null };
+      if (error) {
+        // 網址拿到了但沒存起來：客人這次付得了款，只是關掉分頁後無法重來。
+        console.error("[orders] 付款網址寫入失敗", order_no, error.message);
+      }
+    } else {
+      console.error("[orders] 建立付款單失敗", order_no, created.reason);
+    }
+  }
+
+  return NextResponse.json({
+    order_no,
+    total,
+    persisted,
+    price_unverified,
+    payment_url,
+  });
 }
 
 function getServiceClient() {
