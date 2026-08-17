@@ -98,9 +98,50 @@ export default async function AccountHomePage() {
               </li>
             ))}
           </ul>
+
+          <PasswordReminder />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * 換密碼提醒。
+ *
+ * 2026-08 把 2023 年舊平台的學員匯進來時，是統一發同一組預設密碼給他們的
+ * —— 也就是說，知道某個人 email 的人就能登入他的帳號，看到姓名、電話與訂單。
+ * 這條提醒是那個取捨的配套。
+ *
+ * 文案刻意寫成「如果你現在用的是……」而不是直接說「請改密碼」：
+ * 自己設過密碼的人（訪客結帳後走設定密碼信的那群）讀到也不會困惑，
+ * 所以不需要為了顯示這段而去記「這個人有沒有改過密碼」的狀態。
+ *
+ * 連到 /reset-password —— 那頁對已登入者就是「修改密碼」，
+ * 跟 /account/settings 的改密碼入口是同一個地方。
+ */
+function PasswordReminder() {
+  return (
+    <section className="mt-[24px] rounded-card border border-sand-300 px-[20px] py-[18px] md:mt-[32px] md:px-[26px] md:py-[22px]">
+      <h2 className="t-h3 text-brown-900">換一組只有你知道的密碼</h2>
+      <p className="t-body mt-[8px] text-pretty text-brown-700">
+        如果你現在用的是我們提供的預設密碼，建議改成自己的。
+        改好之後，下次就用新的密碼登入。
+      </p>
+      <div className="mt-[16px]">
+        <Link
+          href="/reset-password"
+          className={buttonClass({
+            variant: "outline",
+            size: "lg",
+            fullWidth: true,
+            className: "sm:w-auto",
+          })}
+        >
+          設定新的密碼
+        </Link>
+      </div>
+    </section>
   );
 }
 
