@@ -34,6 +34,24 @@ export const SITE = {
   facebookHref: "https://www.facebook.com/JSJSelfhelp",
   facebookLabel: "Facebook 粉絲頁",
   address: "臺北市中山區新生北路三段 1 號 9 樓之 15",
+  /**
+   * 頁尾顯示的服務窗口。
+   *
+   * 🔴 這裡刻意**不是** address：客戶要求頁尾寫服務窗口而不是公司地址。
+   *    address 仍然是真的公司地址，/terms（負責人與地址是法規要求）、
+   *    /about 的公司資訊表、工作坊場地 fallback、交易信頁尾都還在用它，
+   *    不要為了改頁尾就把 address 整個換掉。
+   *
+   * 拆成四段而不是一整個字串，是因為書店名要能點進他們自己的網站。
+   */
+  contactWindow: {
+    prefix: "服務窗口：",
+    shop: "小時光書店",
+    shopHref: "https://www.intervalbooks.tw/",
+    /** 全形空格：HTML 會把連續半形空格併成一個 */
+    separator: "　",
+    person: "柳樺老師",
+  },
   footerLine:
     "好日子股份有限公司・LINE @hao2082l・臺北市中山區新生北路三段 1 號 9 樓之 15",
   copyright: "Copyright © 2026 快樂手",

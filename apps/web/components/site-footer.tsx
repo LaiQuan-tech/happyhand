@@ -44,7 +44,19 @@ export function SiteFooter() {
                 /about 的公司資訊表是介紹用，那兩處保留。 */}
             統一編號 {SITE.taxId}
             <br />
-            {SITE.address}
+            {SITE.contactWindow.prefix}
+            {/* 站外連結，要自己帶 target/rel；加底線讓它看得出來可以點 */}
+            <a
+              href={SITE.contactWindow.shopHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-[3px] transition-colors duration-200 hover:text-caramel-dk"
+            >
+              {SITE.contactWindow.shop}
+              <span className="sr-only">（會開啟小時光書店網站）</span>
+            </a>
+            {SITE.contactWindow.separator}
+            {SITE.contactWindow.person}
           </p>
         </div>
 
