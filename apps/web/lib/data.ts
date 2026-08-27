@@ -119,9 +119,20 @@ export async function getPublishedSlugs(
 export type WorkshopRow = {
   id?: string;
   slug: string;
+  /** 商品名稱 */
   title: string;
   subtitle: string;
+  /**
+   * 這一梯實際的售價。
+   * 🔴 已經套用過「梯次價優先於商品價」的規則 —— 前台顯示的數字必須跟
+   *    /api/orders 算出來的一致，否則客人看到 6,800 卻被收 500（或反過來）。
+   */
   price: number;
+  /** 梯次自己的名稱，例如「2026 年 9 月假日班」。沒設就是 null */
+  sessionTitle: string | null;
+  /** 梯次一句話摘要 */
+  sessionSummary: string | null;
+  sessionNotes: string | null;
   starts_at: string;
   ends_at: string;
   location: string;
@@ -174,7 +185,11 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
       slug: s.products.slug,
       title: s.products.title,
       subtitle: s.products.subtitle,
-      price: s.products.price,
+      // 🔴 梯次價優先。用 != null 不是 falsy —— 0 元是合法的梯次價。
+      price: s.price != null ? s.price : s.products.price,
+      sessionTitle: s.title ?? null,
+      sessionSummary: s.summary ?? null,
+      sessionNotes: s.notes ?? null,
       starts_at: s.starts_at,
       ends_at: s.ends_at,
       location: s.location,

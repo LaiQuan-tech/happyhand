@@ -44,6 +44,10 @@ export function SessionRow({
 
   // 語音朗讀用的完整日期，例如「9月12日（週六）」
   const dateText = `${monthLabel}${dayLabel}日（${weekday}）`;
+
+  // 梯次名稱優先於商品名。同一門課有好幾梯時（假日班／平日線上班），
+  // 每列都印一樣的商品名，客人分不出差別。
+  const headline = session.sessionTitle?.trim() || session.title;
   // 場次時段，會跟著訂單一路顯示到購物車與訂單摘要
   const sessionLabel = `${dateText} ${timeRange(session.starts_at, session.ends_at)}`;
 
@@ -62,6 +66,12 @@ export function SessionRow({
       }
     >
       {session.location}・{timeRange(session.starts_at, session.ends_at)}
+      {session.sessionSummary?.trim() && (
+        <>
+          <br />
+          <span className="text-brown-300">{session.sessionSummary}</span>
+        </>
+      )}
     </p>
   );
 
@@ -90,10 +100,10 @@ export function SessionRow({
                    t-h3 在 375px 是 20px×1.4 = 28px 行高，加上下 14px 剛好 56px。 */
                 className="-my-[14px] inline-block py-[14px] transition-colors duration-200 hover:text-caramel-ink"
               >
-                {session.title}
+                {headline}
               </Link>
             ) : (
-              session.title
+              headline
             )}
           </h3>
         )}
@@ -149,10 +159,10 @@ export function SessionRow({
           <AddSessionButton
             sessionId={session.id}
             slug={session.slug}
-            title={session.title}
+            title={headline}
             price={session.price}
             sessionLabel={sessionLabel}
-            ariaLabel={`我要報名：${session.title} ${dateText}`}
+            ariaLabel={`我要報名：${headline} ${dateText}`}
           />
         )}
       </div>
