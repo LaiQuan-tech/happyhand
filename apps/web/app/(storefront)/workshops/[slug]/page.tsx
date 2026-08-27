@@ -5,7 +5,14 @@ import { Figure } from "@/components/ui/placeholder";
 import { buttonClass } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { SITE } from "@/lib/site";
-import { getProduct, getWorkshopSessions, getPublishedSlugs } from "@/lib/data";
+import {
+  getProduct,
+  getWorkshopSessions,
+  getPublishedSlugs,
+  getSiteSetting,
+  type HealthNoticeSetting,
+  type TeacherSetting,
+} from "@/lib/data";
 import { SessionRow } from "../_components/session-row";
 import {
   BulletSection,
@@ -17,6 +24,8 @@ import {
   PricingSection,
   StepSection,
   TagCloud,
+  TeacherSection,
+  HealthNoticeSection,
 } from "../_components/content-sections";
 import { NoSessions } from "../_components/no-sessions";
 
@@ -70,9 +79,12 @@ export async function generateMetadata({
  */
 export default async function WorkshopDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const [product, allSessions] = await Promise.all([
+  const [product, allSessions, teacher, healthNotice] = await Promise.all([
     getProduct(slug),
     getWorkshopSessions(),
+    // 講師與健康聲明是所有課共用的，放在 site_settings 而不是每個商品重填
+    getSiteSetting<TeacherSetting>("teacher"),
+    getSiteSetting<HealthNoticeSetting>("health_notice"),
   ]);
 
   if (!product || product.type !== "workshop") notFound();
@@ -218,7 +230,11 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
 
         <PricingSection blocks={blocksOf("pricing")} />
 
+        <TeacherSection teacher={teacher} />
+
         <FaqSection blocks={blocksOf("faq")} />
+
+        <HealthNoticeSection notice={healthNotice} />
       </div>
 
 

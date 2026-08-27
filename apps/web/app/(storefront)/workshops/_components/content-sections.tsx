@@ -1,6 +1,11 @@
 import { Accordion } from "@/components/ui/accordion";
 import { formatPrice } from "@/lib/site";
-import type { ProductBlock } from "@/lib/data";
+import { Figure } from "@/components/ui/placeholder";
+import type {
+  HealthNoticeSetting,
+  ProductBlock,
+  TeacherSetting,
+} from "@/lib/data";
 
 /**
  * 報名頁的內容區塊。
@@ -316,5 +321,90 @@ export function FeatureSection({ blocks }: { blocks: ProductBlock[] }) {
         ))}
       </div>
     </Section>
+  );
+}
+
+
+/** 講師介紹。資料來自 site_settings 的 teacher，所有課共用。 */
+export function TeacherSection({
+  teacher,
+}: {
+  teacher: TeacherSetting | null;
+}) {
+  if (!teacher?.name?.trim()) return null;
+  const paragraphs = (teacher.paragraphs ?? []).filter((p) => p?.trim());
+  const credentials = (teacher.credentials ?? []).filter((c) => c?.trim());
+  const links = (teacher.links ?? []).filter((l) => l?.href?.trim());
+
+  return (
+    <Section eyebrow="認識您的學習引路人" title={`${teacher.name}｜${teacher.title}`}>
+      <div className="flex flex-col gap-[20px] md:flex-row md:gap-[32px]">
+        {teacher.photo_url && (
+          <Figure
+            src={teacher.photo_url}
+            alt={teacher.name}
+            rounded="rounded-card"
+            sizes="220px"
+            className="h-[220px] w-full shrink-0 md:w-[220px]"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          {paragraphs.map((p, i) => (
+            <p key={i} className="t-body mt-[10px] text-pretty text-brown-700 first:mt-0">
+              {p}
+            </p>
+          ))}
+
+          {credentials.length > 0 && (
+            <ul className="mt-[18px] flex flex-col gap-[8px] border-t border-sand-300 pt-[16px]">
+              {credentials.map((c, i) => (
+                <li key={i} className="t-body-sm flex gap-[10px] text-brown-500">
+                  <span aria-hidden className="shrink-0 text-caramel-dk">・</span>
+                  <span>{c}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {links.length > 0 && (
+            <ul className="mt-[16px] flex flex-wrap gap-[10px]">
+              {links.map((l, i) => (
+                <li key={i}>
+                  {/* 站外連結要自己帶 target/rel */}
+                  <a
+                    href={l.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-[44px] items-center rounded-pill border border-sand-400 px-[16px] text-[16px] text-brown-700 transition-colors hover:bg-cream-100"
+                  >
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * 健康聲明。
+ * ⚠️ 這是法規要求的內容，字級不可以縮小、也不該塞進摺疊區藏起來。
+ */
+export function HealthNoticeSection({
+  notice,
+}: {
+  notice: HealthNoticeSetting | null;
+}) {
+  if (!notice?.body?.trim()) return null;
+  return (
+    <section className="rounded-card border-2 border-sand-400 px-[20px] py-[24px] md:px-[30px] md:py-[28px]">
+      <h2 className="t-h3 text-brown-900">{notice.title || "健康聲明"}</h2>
+      <p className="t-body mt-[12px] whitespace-pre-line text-pretty text-brown-700">
+        {notice.body}
+      </p>
+    </section>
   );
 }

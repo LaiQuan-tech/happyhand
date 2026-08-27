@@ -285,3 +285,42 @@ export function twDate(iso: string) {
 export function timeRange(startIso: string, endIso: string) {
   return `${twDate(startIso).time}–${twDate(endIso).time}`;
 }
+
+/* ------------------------------------------------------------ 站台設定 */
+
+export type TeacherSetting = {
+  name: string;
+  title: string;
+  paragraphs: string[];
+  credentials: string[];
+  links: { label: string; href: string }[];
+  photo_url: string | null;
+};
+
+export type HealthNoticeSetting = { title: string; body: string };
+
+/**
+ * 站台共用內容（site_settings 表）。
+ *
+ * 講師介紹、健康聲明這類東西每門課都一樣，不該在每個商品重填一次。
+ * 讀不到就回 null，呼叫端一律「沒有就整塊不顯示」—— 跟報名頁其他區塊同一條規則。
+ */
+export async function getSiteSetting<T>(key: string): Promise<T | null> {
+  if (!hasSupabaseEnv()) return null;
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", key)
+      .maybeSingle();
+    if (error) {
+      console.error("[data] getSiteSetting 失敗", key, error.message);
+      return null;
+    }
+    return (data?.value as T) ?? null;
+  } catch (err) {
+    console.error("[data] getSiteSetting 例外", key, err);
+    return null;
+  }
+}

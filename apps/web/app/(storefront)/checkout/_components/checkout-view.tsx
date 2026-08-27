@@ -34,11 +34,23 @@ export function CheckoutView() {
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("credit");
 
+  /**
+   * 報名問題。只有購物車裡有工作坊時才問 —— 線上課買了就能看，
+   * 不需要老師事先知道學員狀況。
+   */
+  const [intakeExperience, setIntakeExperience] = useState("");
+  const [intakeGoal, setIntakeGoal] = useState("");
+  const [intakeSource, setIntakeSource] = useState("");
+  const [healthAck, setHealthAck] = useState(false);
+
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+
+  // 工作坊要收報名資料。用購物車裡的 type 判斷，不必為此多打一次 API。
+  const needsIntake = items.some((i) => i.type === "workshop");
 
   /**
    * 已登入的人不用重打資料。
@@ -165,6 +177,13 @@ export function CheckoutView() {
       return;
     }
 
+    // 健康聲明是法律上的告知同意，沒勾就不能送出。
+    if (needsIntake && !healthAck) {
+      setFormError("請先閱讀並勾選最下面的健康聲明，我們才能幫你完成報名。");
+      window.requestAnimationFrame(() => alertRef.current?.focus());
+      return;
+    }
+
     setFormError(null);
     setBusy(true);
 
@@ -179,6 +198,15 @@ export function CheckoutView() {
           address: address.trim(),
           note: note.trim(),
           payment,
+          // 報名問題。沒有工作坊時全部是空的，後端會存 null。
+          intake: needsIntake
+            ? {
+                experience: intakeExperience || null,
+                goal: intakeGoal.trim() || null,
+                source: intakeSource || null,
+                healthAck: healthAck,
+              }
+            : null,
           items: items.map((i) => ({
             productId: i.productId,
             slug: i.slug,
@@ -362,6 +390,102 @@ export function CheckoutView() {
                   />
                 </div>
               </div>
+
+              {needsIntake && (
+                <div className="mt-[24px] rounded-card border border-sand-400 px-[20px] py-[22px] md:px-[26px]">
+                  <h2 className="t-h3 text-brown-900">報名資料</h2>
+                  <p className="t-body-sm mt-[6px] text-brown-500">
+                    這幾題是給老師備課用的，讓他知道大家的狀況。
+                  </p>
+
+                  <div className="mt-[18px] flex flex-col gap-[18px]">
+                    <fieldset>
+                      <legend className="t-body font-medium text-brown-900">
+                        你接觸過仁神術嗎？
+                      </legend>
+                      <div className="mt-[10px] flex flex-col gap-[8px]">
+                        {[
+                          ["none", "沒有，第一次接觸"],
+                          ["heard", "有聽過或體驗過"],
+                          ["formal", "曾正式學習過"],
+                        ].map(([value, label]) => (
+                          <label
+                            key={value}
+                            className="flex min-h-[44px] cursor-pointer items-center gap-[10px] text-[17px] text-brown-700"
+                          >
+                            <input
+                              type="radio"
+                              name="intake_experience"
+                              value={value}
+                              checked={intakeExperience === value}
+                              onChange={() => setIntakeExperience(value)}
+                              className="h-[20px] w-[20px] accent-caramel-ink"
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    <Field
+                      label="最希望改善或理解什麼？"
+                      name="intake_goal"
+                      as="textarea"
+                      value={intakeGoal}
+                      onChange={setIntakeGoal}
+                      hint="簡單寫幾句就好，老師會參考大家的狀況調整內容。"
+                    />
+
+                    <fieldset>
+                      <legend className="t-body font-medium text-brown-900">
+                        你從哪裡知道這堂課？
+                      </legend>
+                      <div className="mt-[10px] flex flex-wrap gap-[8px]">
+                        {["朋友介紹", "老師介紹", "Facebook", "Google 搜尋", "電子報", "其他"].map(
+                          (opt) => (
+                            <label
+                              key={opt}
+                              className={`flex min-h-[44px] cursor-pointer items-center rounded-pill border px-[18px] text-[17px] transition-colors ${
+                                intakeSource === opt
+                                  ? "border-caramel-ink bg-cream-100 text-brown-900"
+                                  : "border-sand-400 text-brown-700 hover:bg-cream-100"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="intake_source"
+                                value={opt}
+                                checked={intakeSource === opt}
+                                onChange={() => setIntakeSource(opt)}
+                                className="sr-only"
+                              />
+                              {opt}
+                            </label>
+                          ),
+                        )}
+                      </div>
+                    </fieldset>
+
+                    {/*
+                      健康聲明。⚠️ 這是法律上的告知同意，不能只是畫面上的一行字 ——
+                      勾選時間會存進 orders.health_ack_at。
+                    */}
+                    <label className="flex cursor-pointer gap-[10px] rounded-card bg-cream-100 px-[16px] py-[14px]">
+                      <input
+                        type="checkbox"
+                        checked={healthAck}
+                        onChange={(e) => setHealthAck(e.target.checked)}
+                        className="mt-[4px] h-[20px] w-[20px] shrink-0 accent-caramel-ink"
+                      />
+                      <span className="t-body-sm text-brown-700">
+                        我已閱讀並同意：本課程為自我照顧與身體覺察練習，
+                        不提供醫療診斷、不取代醫療、不處理緊急狀況，
+                        也不建議自行停藥或中斷治療。
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <PaymentOptions value={payment} onChange={setPayment} />
             </div>

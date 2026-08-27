@@ -144,6 +144,26 @@ export async function POST(request: Request) {
   const note = str(body.note, 1000);
   const payment = str(body.payment, 20);
 
+  /**
+   * 報名問題（工作坊才有）。
+   * ⚠️ health_ack_at 存的是**時間**不是 boolean —— 那是法律上的告知同意證據，
+   *    「什麼時候同意的」比「有沒有同意」更重要。
+   */
+  const intakeRaw = (body.intake ?? null) as Record<string, unknown> | null;
+  const intake = intakeRaw
+    ? {
+        intake_experience: str(intakeRaw.experience, 40) || null,
+        intake_goal: str(intakeRaw.goal, 2000) || null,
+        intake_source: str(intakeRaw.source, 60) || null,
+        health_ack_at: intakeRaw.healthAck === true ? new Date().toISOString() : null,
+      }
+    : {
+        intake_experience: null,
+        intake_goal: null,
+        intake_source: null,
+        health_ack_at: null,
+      };
+
   if (!name) return bad("請填姓名。");
   if (!PHONE_RE.test(phone)) return bad("手機號碼是 09 開頭、總共 10 個數字。");
   if (!EMAIL_RE.test(email)) return bad("Email 格式看起來不太對，請再檢查一次。");
@@ -256,6 +276,7 @@ export async function POST(request: Request) {
         address,
         note,
         lines,
+        intake,
       })
     : null;
   const persisted = orderId !== null;
@@ -564,6 +585,12 @@ async function persist(
     address: string;
     note: string;
     lines: Line[];
+    intake: {
+      intake_experience: string | null;
+      intake_goal: string | null;
+      intake_source: string | null;
+      health_ack_at: string | null;
+    };
   },
 ) {
   const base = {
@@ -587,6 +614,9 @@ async function persist(
     shipping_address: o.address || null,
     note: o.note || null,
     price_unverified: o.price_unverified,
+    // 報名問題（工作坊才會有值）。放在 rich 而不是 base：
+    // base 是「連 contact_* 都寫不進去時」的退路，那種情況下這幾欄更不可能寫得進去。
+    ...o.intake,
   };
 
   let orderId: string | null = null;
