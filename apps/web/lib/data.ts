@@ -19,8 +19,19 @@ import type { Product, WorkshopSession } from "@/lib/content";
  * 用 createPublicClient()（不讀 cookie）讓這些頁面能維持靜態 + ISR。
  */
 
+/** 報名頁的內容區塊（product_blocks）。kind 決定前台怎麼渲染。 */
+export type ProductBlock = {
+  id: string;
+  kind: string;
+  sort_order: number;
+  title: string | null;
+  body: string | null;
+  meta: Record<string, unknown>;
+};
+
 export type ProductWithSessions = Product & {
   id?: string;
+  blocks?: ProductBlock[];
   sessions?: (WorkshopSession & { id?: string; status?: string })[];
 };
 
@@ -67,7 +78,7 @@ export async function getProduct(
     const { data, error } = await supabase
       .from("products")
       .select(
-        `${PRODUCT_SELECT}, course_lessons(id, title, duration_sec, free_preview, sort_order), workshop_sessions(*)`,
+        `${PRODUCT_SELECT}, course_lessons(id, title, duration_sec, free_preview, sort_order), workshop_sessions(*), product_blocks(id, kind, sort_order, title, body, meta)`,
       )
       .eq("slug", slug)
       .eq("is_published", true)
@@ -81,6 +92,9 @@ export async function getProduct(
 
     return {
       ...mapProduct(data),
+      blocks: ((data.product_blocks ?? []) as ProductBlock[])
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order),
       sessions: (data.workshop_sessions ?? [])
         .slice()
         .sort((a: { starts_at: string }, b: { starts_at: string }) =>

@@ -8,6 +8,11 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { parseYouTubeId } from "@/lib/youtube";
 import { taipeiLocalToIso, formatTaipei } from "@/components/admin/datetime-field";
 import { applyLessonPlan, planLessonWrites, type SubmittedLesson } from "./lesson-plan";
+import {
+  applyBlockPlan,
+  planBlockWrites,
+  type SubmittedBlock,
+} from "./block-plan";
 import { checkProductDeletable, checkSessionDeletable, type CountClient } from "./guards";
 import {
   PRODUCT_TYPES,
@@ -762,6 +767,141 @@ export async function deleteSession(
     return undefined;
   } catch (err) {
     console.error("[admin/products] deleteSession 例外", err);
+    return { error: adminErrorMessage(err) };
+  }
+}
+
+
+/* ------------------------------------------------------- 內容區塊（FAQ 等） */
+
+export type BlockSaveState = { error?: string | null; ok?: string | null } | null;
+
+/** 每種區塊的中文名，錯誤訊息用得到。 */
+const BLOCK_KIND_LABEL: Record<string, string> = {
+  faq: "常見問題",
+  step: "學習路徑",
+  info_row: "報名資訊",
+  pricing: "費用方案",
+  feature: "特色說明",
+};
+
+/**
+ * 儲存某一種內容區塊（一次一個 kind）。
+ *
+ * 排序走 block-plan.ts 的 PARK→FINAL —— product_blocks 有
+ * `unique (product_id, kind, sort_order)`，逐筆改成目標值一定會撞 23505。
+ *
+ * ⚠️ 跟 saveLessons 一樣用「索引命名」而不是同名多值 + getAll()：
+ *    空欄位在 FormData 裡的行為不一致，用 getAll() 對齊會整排錯位。
+ */
+export async function saveBlocks(
+  productId: string,
+  kind: string,
+  _prev: BlockSaveState,
+  formData: FormData,
+): Promise<BlockSaveState> {
+  try {
+    const staff = await requireCapability("catalog:write");
+
+    if (!BLOCK_KIND_LABEL[kind]) {
+      return { error: "區塊類型不正確，請重新整理後再試。" };
+    }
+    const label = BLOCK_KIND_LABEL[kind];
+
+    const count = Number(formData.get("block_count") ?? "0");
+    if (!Number.isInteger(count) || count < 0 || count > 100) {
+      return { error: `${label}的數量不正確，請重新整理後再試。` };
+    }
+
+    const submitted: SubmittedBlock[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const title = String(formData.get(`blocks.${i}.title`) ?? "").trim();
+      const body = String(formData.get(`blocks.${i}.body`) ?? "").trim();
+
+      // 整列都空白就當作使用者想刪掉它，不要存一列空的進去。
+      if (!title && !body) continue;
+
+      if (!title) {
+        return { error: `第 ${i + 1} 個${label}沒有填標題。` };
+      }
+
+      // pricing 額外帶金額與附註；其他 kind 的 meta 保持空物件。
+      const meta: Record<string, unknown> = {};
+      if (kind === "pricing") {
+        const amountRaw = String(formData.get(`blocks.${i}.amount`) ?? "").trim();
+        if (amountRaw) {
+          const amount = Number(amountRaw);
+          if (!Number.isInteger(amount) || amount < 0) {
+            return { error: `第 ${i + 1} 個${label}的金額請填 0 或正整數。` };
+          }
+          meta.amount = amount;
+        }
+        const note = String(formData.get(`blocks.${i}.note`) ?? "").trim();
+        if (note) meta.note = note.slice(0, 300);
+      }
+
+      submitted.push({
+        id: String(formData.get(`blocks.${i}.id`) ?? "").trim(),
+        title: title.slice(0, 300),
+        body: body ? body.slice(0, 4000) : null,
+        meta,
+      });
+    }
+
+    const db = createServiceClient();
+
+    const { data: existingRaw, error: readError } = await db
+      .from("product_blocks")
+      .select("id, sort_order")
+      .eq("product_id", productId)
+      .eq("kind", kind)
+      .order("sort_order");
+    if (readError) {
+      console.error("[admin/products] 讀內容區塊失敗", readError.message);
+      return { error: "讀取現有內容失敗，請重試一次。" };
+    }
+
+    const existing = (existingRaw ?? []) as { id: string; sort_order: number }[];
+    const plan = planBlockWrites(existing, submitted);
+
+    // 樂觀鎖：送上來的 id 資料庫找不到 = 有人在你編輯的時候刪了它。
+    // 這時候整批擋下，不要只寫一半。
+    if (plan.unknownIds.length > 0) {
+      return {
+        error: `有${label}在你編輯的時候被其他同事刪掉了。請重新整理頁面再改一次。`,
+      };
+    }
+
+    const failure = await applyBlockPlan(db, productId, kind, plan);
+    if (failure) {
+      const stageText = {
+        delete: "刪除舊資料",
+        park: "調整順序（第一階段）",
+        final: "寫入內容",
+        insert: "新增資料",
+      }[failure.stage];
+      console.error("[admin/products] 內容區塊寫入失敗", kind, failure.stage);
+      return { error: `儲存${label}時在「${stageText}」失敗，請重試一次。` };
+    }
+
+    await writeAudit(staff, {
+      action: "product.blocks",
+      entity: "product",
+      entityId: productId,
+      summary: `更新${label}（共 ${submitted.length} 筆）`,
+      diff: {
+        kind,
+        count: submitted.length,
+        deleted: plan.deleteIds.length,
+        inserted: plan.insert.length,
+      },
+    });
+
+    revalidateAdmin(productId);
+    revalidateStorefront();
+    return { ok: `已儲存 ${submitted.length} 筆${label}。` };
+  } catch (err) {
+    console.error("[admin/products] saveBlocks 例外", err);
     return { error: adminErrorMessage(err) };
   }
 }

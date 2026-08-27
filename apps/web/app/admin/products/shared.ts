@@ -95,6 +95,24 @@ export type LessonRow = {
   sort_order: number;
 };
 
+export type BlockRow = {
+  id: string;
+  kind: string;
+  sort_order: number;
+  title: string | null;
+  body: string | null;
+  meta: Record<string, unknown>;
+};
+
+export const BLOCK_KINDS = [
+  "faq",
+  "step",
+  "info_row",
+  "pricing",
+  "feature",
+] as const;
+export type BlockKind = (typeof BLOCK_KINDS)[number];
+
 export type SessionRow = {
   id: string;
   starts_at: string;

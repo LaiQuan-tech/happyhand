@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { ProductForm } from "@/components/admin/product-form";
 import { LessonEditor } from "@/components/admin/lesson-editor";
 import { SessionEditor } from "@/components/admin/session-editor";
+import { BlockEditor } from "@/components/admin/block-editor";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { deleteProduct, togglePublish } from "../actions";
 import {
@@ -14,6 +15,7 @@ import {
   type LessonRow,
   type ProductRow,
   type SessionRow,
+  type BlockRow,
 } from "../shared";
 import {
   FormNotice,
@@ -36,6 +38,35 @@ import {
  */
 
 export const dynamic = "force-dynamic";
+
+/** 報名頁區塊的顯示順序與說明。順序就是後台的排列順序。 */
+const BLOCK_SECTIONS = [
+  {
+    kind: "faq",
+    title: "常見問題",
+    description: "客人最常問的問題。前台是可以點開收合的手風琴。",
+  },
+  {
+    kind: "step",
+    title: "學習路徑",
+    description: "從報名到完課的階段。前台會自動編號 01、02…",
+  },
+  {
+    kind: "info_row",
+    title: "報名資訊",
+    description: "課程費用、上課地點、付款方式這類「項目：內容」的對照表。",
+  },
+  {
+    kind: "pricing",
+    title: "費用方案",
+    description: "新生價、複訓價等不同方案。可以各自帶金額與附註。",
+  },
+  {
+    kind: "feature",
+    title: "特色說明",
+    description: "陪伴機制、教學特色這類三欄卡片。",
+  },
+] as const;
 
 export default async function AdminProductEditPage({
   params,
@@ -70,6 +101,7 @@ export default async function AdminProductEditPage({
 
   let product: ProductRow | null = null;
   let lessons: LessonRow[] = [];
+  let blocks: BlockRow[] = [];
   let sessions: SessionRow[] = [];
   let loadError = "";
 
@@ -89,7 +121,7 @@ export default async function AdminProductEditPage({
     const raw = data as unknown as ProductRow & { type: string };
     product = { ...raw, type: toProductType(raw.type) };
 
-    const [lessonResult, sessionResult] = await Promise.all([
+    const [lessonResult, sessionResult, blockResult] = await Promise.all([
       db
         .from("course_lessons")
         .select("id, title, duration_sec, youtube_id, free_preview, sort_order")
@@ -100,12 +132,20 @@ export default async function AdminProductEditPage({
         .select("id, starts_at, ends_at, location, address, capacity, seats_taken, status, title, summary, format, price, notes")
         .eq("product_id", id)
         .order("starts_at", { ascending: true }),
+      db
+        .from("product_blocks")
+        .select("id, kind, sort_order, title, body, meta")
+        .eq("product_id", id)
+        .order("kind", { ascending: true })
+        .order("sort_order", { ascending: true }),
     ]);
 
     if (lessonResult.error) throw new Error(lessonResult.error.message);
     if (sessionResult.error) throw new Error(sessionResult.error.message);
+    if (blockResult.error) throw new Error(blockResult.error.message);
 
     lessons = (lessonResult.data ?? []) as unknown as LessonRow[];
+    blocks = (blockResult.data ?? []) as unknown as BlockRow[];
     sessions = ((sessionResult.data ?? []) as unknown as (SessionRow & { status: string })[]).map(
       (row) => ({ ...row, status: toSessionStatus(row.status) }),
     );
@@ -195,6 +235,28 @@ export default async function AdminProductEditPage({
           <LessonEditor productId={product.id} lessons={lessons} />
         </section>
       )}
+
+      {/*
+        報名頁的內容區塊。每一種都可以增減與排序，全部留空就不會顯示在前台。
+        一個 BlockEditor 吃 kind 參數重用五次 —— 它們的差別只有標籤文字。
+      */}
+      <section className="flex flex-col gap-6 border-t border-line pt-6">
+        <SectionHeader
+          title="報名頁區塊"
+          description="常見問題、學習路徑、報名資訊、費用方案與特色說明。每一區留空就不會出現在前台。"
+        />
+        {BLOCK_SECTIONS.map((sec) => (
+          <div key={sec.kind} className="flex flex-col gap-3">
+            <h3 className="text-[15px] font-medium text-ink">{sec.title}</h3>
+            <p className="text-[13px] text-ink-soft">{sec.description}</p>
+            <BlockEditor
+              productId={product.id}
+              kind={sec.kind}
+              blocks={blocks.filter((b) => b.kind === sec.kind)}
+            />
+          </div>
+        ))}
+      </section>
 
       {showSessions && (
         <section id="sessions" className="flex flex-col gap-4 border-t border-line pt-6">

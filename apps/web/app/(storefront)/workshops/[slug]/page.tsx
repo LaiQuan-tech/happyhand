@@ -10,7 +10,12 @@ import { SessionRow } from "../_components/session-row";
 import {
   BulletSection,
   CompareSection,
+  FaqSection,
+  FeatureSection,
+  InfoTableSection,
   LeadText,
+  PricingSection,
+  StepSection,
   TagCloud,
 } from "../_components/content-sections";
 import { NoSessions } from "../_components/no-sessions";
@@ -73,6 +78,9 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
   if (!product || product.type !== "workshop") notFound();
 
   const sessions = allSessions.filter((s) => s.slug === slug);
+  // 內容區塊依 kind 分組。RLS 已經擋掉未發布商品的區塊，這裡不用再過濾。
+  const blocks = product.blocks ?? [];
+  const blocksOf = (kind: string) => blocks.filter((b) => b.kind === kind);
   const openSession = sessions.find(
     (s) => s.capacity - s.seats_taken - (s.held ?? 0) > 0,
   );
@@ -187,6 +195,8 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
           tone="cream"
         />
 
+        <StepSection blocks={blocksOf("step")} />
+
         <CompareSection
           eyebrow="課程內容"
           title="這堂課會上什麼"
@@ -196,11 +206,19 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
           rightItems={product.curriculum_onsite}
         />
 
+        <FeatureSection blocks={blocksOf("feature")} />
+
         <TagCloud
           eyebrow="完整配套"
           title="一次報名，全部帶走"
           items={product.includes}
         />
+
+        <InfoTableSection blocks={blocksOf("info_row")} />
+
+        <PricingSection blocks={blocksOf("pricing")} />
+
+        <FaqSection blocks={blocksOf("faq")} />
       </div>
 
 

@@ -1,3 +1,7 @@
+import { Accordion } from "@/components/ui/accordion";
+import { formatPrice } from "@/lib/site";
+import type { ProductBlock } from "@/lib/data";
+
 /**
  * 報名頁的內容區塊。
  *
@@ -180,6 +184,137 @@ export function TagCloud({
           </li>
         ))}
       </ul>
+    </Section>
+  );
+}
+
+/* ------------------------------------------------- product_blocks 的區塊 */
+
+
+/** 常見問題。直接用站上既有的 Accordion（它的型別就是 {q, a}）。 */
+export function FaqSection({ blocks }: { blocks: ProductBlock[] }) {
+  const items = blocks
+    .filter((b) => b.title?.trim())
+    .map((b) => ({ q: b.title!.trim(), a: (b.body ?? "").trim() }));
+  if (items.length === 0) return null;
+  return (
+    <Section eyebrow="常見問題" title="您想知道的，我們先回答">
+      <Accordion items={items} />
+    </Section>
+  );
+}
+
+/** 學習路徑。前台自動編號，後台不用自己打 01、02。 */
+export function StepSection({ blocks }: { blocks: ProductBlock[] }) {
+  const steps = blocks.filter((b) => b.title?.trim());
+  if (steps.length === 0) return null;
+  return (
+    <Section eyebrow="學習路徑" title="從理解、練習，到真正融入生活">
+      <ol className="grid gap-[16px] md:grid-cols-2 lg:grid-cols-3">
+        {steps.map((s, i) => (
+          <li
+            key={s.id}
+            className="rounded-card border border-sand-300 bg-white px-[20px] py-[22px]"
+          >
+            <span className="font-serif text-[26px] leading-none text-caramel-ink">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <h3 className="t-h3 mt-[10px] text-brown-900">{s.title}</h3>
+            {s.body?.trim() && (
+              <p className="t-body-sm mt-[8px] whitespace-pre-line text-pretty text-brown-500">
+                {s.body}
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </Section>
+  );
+}
+
+/** 報名資訊對照表（項目：內容）。 */
+export function InfoTableSection({ blocks }: { blocks: ProductBlock[] }) {
+  const rows = blocks.filter((b) => b.title?.trim());
+  if (rows.length === 0) return null;
+  return (
+    <Section eyebrow="梯次、費用與報名" title="報名前，先確認這些資訊" tone="cream">
+      <dl className="flex flex-col">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="grid gap-[4px] border-b border-sand-300 py-[14px] last:border-b-0 md:grid-cols-[200px_1fr] md:gap-[16px]"
+          >
+            <dt className="t-body font-medium text-brown-900">{r.title}</dt>
+            <dd className="t-body whitespace-pre-line text-pretty text-brown-700">
+              {r.body}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
+  );
+}
+
+/** 費用方案卡。meta.amount 有值才顯示金額。 */
+export function PricingSection({ blocks }: { blocks: ProductBlock[] }) {
+  const plans = blocks.filter((b) => b.title?.trim());
+  if (plans.length === 0) return null;
+  return (
+    <Section eyebrow="費用" title="費用方案">
+      <div className="grid gap-[16px] md:grid-cols-2">
+        {plans.map((p) => {
+          const amount = p.meta?.amount;
+          const note = p.meta?.note;
+          return (
+            <div
+              key={p.id}
+              className="flex flex-col rounded-card border-2 border-sand-400 bg-white px-[22px] py-[24px]"
+            >
+              <h3 className="t-h3 text-brown-900">{p.title}</h3>
+              {typeof amount === "number" && (
+                <p className="mt-[8px] font-serif text-[28px] font-semibold text-caramel-ink">
+                  {formatPrice(amount)}
+                </p>
+              )}
+              {p.body?.trim() && (
+                <p className="t-body-sm mt-[10px] whitespace-pre-line text-pretty text-brown-700">
+                  {p.body}
+                </p>
+              )}
+              {typeof note === "string" && note.trim() && (
+                <p className="t-caption mt-[12px] border-t border-sand-300 pt-[10px] text-brown-500">
+                  {note}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+/** 特色說明（陪伴機制那種三欄卡片）。 */
+export function FeatureSection({ blocks }: { blocks: ProductBlock[] }) {
+  const items = blocks.filter((b) => b.title?.trim());
+  if (items.length === 0) return null;
+  return (
+    <Section eyebrow="陪伴機制" title="讓您不會學完就一個人">
+      <div className="grid gap-[16px] md:grid-cols-3">
+        {items.map((f) => (
+          <div
+            key={f.id}
+            className="rounded-card bg-cream-100 px-[20px] py-[22px]"
+          >
+            <h3 className="t-h3 text-brown-900">{f.title}</h3>
+            {f.body?.trim() && (
+              <p className="t-body-sm mt-[8px] whitespace-pre-line text-pretty text-brown-500">
+                {f.body}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }
