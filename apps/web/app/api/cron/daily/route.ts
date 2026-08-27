@@ -69,22 +69,22 @@ export async function GET(request: Request) {
   // 3) 補開通：已收款、金額已核、也綁了帳號，但沒有 entitlement 的訂單。
   //    正常情況下 APN 或後台標記付款時就開通了，這裡是防漏網（例如當時
   //    grant 失敗、或訂單是先綁帳號後付款的）。
+  //
+  //    ⚠️ 一定要用 list_unfulfilled_paid_orders() 而不是自己抓 paid 訂單
+  //    limit N —— 後者抓到的永遠是同樣的前 N 筆（早就開通過的），訂單累積
+  //    超過 N 之後，真正漏開通的那筆就永遠輪不到，補救機制會靜默失效。
   try {
-    const { data: pending, error } = await db
-      .from("orders")
-      .select("id, order_no")
-      .eq("status", "paid")
-      .eq("price_unverified", false)
-      .not("user_id", "is", null)
-      .limit(50);
+    const { data: pending, error } = await db.rpc(
+      "list_unfulfilled_paid_orders",
+      { p_limit: 100 },
+    );
 
     if (error) {
       result.regrant = { error: error.message };
     } else {
       let granted = 0;
       let checked = 0;
-      for (const o of pending ?? []) {
-        // grant 本身是冪等的（on conflict do update），已經開過的會回 granted:0
+      for (const o of (pending ?? []) as { id: string; order_no: string }[]) {
         const r = await grantEntitlementsForOrder(o.id);
         checked += 1;
         granted += r.granted;
