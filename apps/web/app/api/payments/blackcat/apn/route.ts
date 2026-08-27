@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantEntitlementsForOrder } from "@/lib/admin/entitlements";
 import {
@@ -256,6 +257,56 @@ export async function POST(request: Request) {
   // updated 是 null 代表訂單已經不是 pending（例如客服先手動標記過），
   // 這不是錯誤 —— 照樣往下開通，grant 本身是冪等的。
   const grant = await grantEntitlementsForOrder(order.id);
+
+  // 🔴 工作坊名額同步。只有這次真的把訂單從 pending 改成 paid 才做，
+  //    否則客服先手動標記過、APN 再進來就會重複加一次。
+  //
+  //    沒有這段的話會超賣：workshop_holds() 只算 pending 的訂單，付款後那筆
+  //    不再計入 held，但 seats_taken 也沒增加 —— 位子就憑空多出來了。
+  //
+  //    ⚠️ 這裡刻意用跟 admin/orders/actions.ts 的 syncSeats() 同一支 RPC
+  //    （admin_adjust_seats）。那支是 server action 的私有函式沒有 export，
+  //    改動它的名額邏輯時記得這裡也要跟著改。
+  if (updated) {
+    const { data: seatItems, error: seatError } = await db
+      .from("order_items")
+      .select("session_id, qty")
+      .eq("order_id", order.id)
+      .not("session_id", "is", null);
+
+    if (seatError) {
+      console.error("[blackcat/apn] 讀取品項失敗，名額未同步", orderNo, seatError.message);
+    } else {
+      // 同一場次可能拆成多個品項，先合併再呼叫，一個場次只打一次 RPC
+      const bySession = new Map<string, number>();
+      for (const it of (seatItems ?? []) as {
+        session_id: string | null;
+        qty: number;
+      }[]) {
+        if (!it.session_id) continue;
+        bySession.set(
+          it.session_id,
+          (bySession.get(it.session_id) ?? 0) + (it.qty ?? 0),
+        );
+      }
+      for (const [sessionId, qty] of bySession) {
+        const { error } = await db.rpc("admin_adjust_seats", {
+          p_session_id: sessionId,
+          p_delta: qty,
+        });
+        if (error) {
+          // 錢已經收了，不能因為名額沒同步就退回。留 log 讓客服對帳。
+          console.error(
+            "[blackcat/apn] 名額同步失敗，請人工確認場次報名人數",
+            orderNo,
+            sessionId,
+            error.message,
+          );
+        }
+      }
+      if (bySession.size > 0) revalidatePath("/workshops");
+    }
+  }
 
   await db
     .from("payment_events")

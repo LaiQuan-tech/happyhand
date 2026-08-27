@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { findOrCreateUser, generateSetupLink } from "@/lib/account/provision";
@@ -320,6 +321,13 @@ export async function POST(request: Request) {
     } else {
       console.error("[orders] 建立付款單失敗", order_no, created.reason);
     }
+  }
+
+  // 這一單佔了工作坊的位子 → 讓 /workshops 立刻重新產生，
+  // 否則剩餘名額最久要等 revalidate = 300 秒才反映。
+  // （佔位「過期」那一側不需要處理，靠那 5 分鐘的 ISR 自然修正就好。）
+  if (orderId && lines.some((l) => l.session_id)) {
+    revalidatePath("/workshops");
   }
 
   return NextResponse.json({
