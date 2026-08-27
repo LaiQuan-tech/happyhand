@@ -73,6 +73,16 @@ export type ProductRow = {
   tags: string[];
   benefits: string[];
   sort_order: number;
+  // 報名頁內容（migration 20260827000003）。留空前台就整塊不顯示。
+  hero_lead: string | null;
+  suitable_for: string[];
+  not_suitable_for: string[];
+  outcomes: string[];
+  curriculum_online: string[];
+  curriculum_onsite: string[];
+  includes: string[];
+  notes: string[];
+  asks_intake: boolean;
 };
 
 export type LessonRow = {
@@ -94,7 +104,32 @@ export type SessionRow = {
   capacity: number;
   seats_taken: number;
   status: SessionStatus;
+  // 梯次自己的名稱與價格（migration 20260827000003）
+  title: string | null;
+  summary: string | null;
+  format: SessionFormat | null;
+  /** null = 用 products.price。⚠️ 0 是合法價格，判斷時要用 != null 不能用 falsy */
+  price: number | null;
+  notes: string | null;
 };
+
+export const SESSION_FORMATS = ["onsite", "online", "hybrid"] as const;
+export type SessionFormat = (typeof SESSION_FORMATS)[number];
+export const SESSION_FORMAT_LABEL: Record<SessionFormat, string> = {
+  onsite: "實體",
+  online: "線上",
+  hybrid: "線上＋實體",
+};
+export const SESSION_FORMAT_CHOICES = SESSION_FORMATS.map((v) => ({
+  value: v,
+  label: SESSION_FORMAT_LABEL[v],
+}));
+
+export function toSessionFormat(v: unknown): SessionFormat | null {
+  return (SESSION_FORMATS as readonly string[]).includes(String(v))
+    ? (v as SessionFormat)
+    : null;
+}
 
 /* -------------------------------------------------------------- slug 驗證 */
 
@@ -126,6 +161,16 @@ export const LIST_ITEM_MAX = 60;
 export const LIST_LENGTH_MAX = 20;
 
 /**
+ * 內容區塊清單（適合對象、學習成果、課程大綱…）的上限。
+ *
+ * 刻意跟 tags / benefits 那組分開：那兩個在前台渲染成 pill，超過 60 字會破版；
+ * 但課程大綱像「26 個安全能量鎖的位置與意義」這種條目，60 字很快就不夠用，
+ * 配套清單也常常超過 20 項。
+ */
+export const CONTENT_ITEM_MAX = 200;
+export const CONTENT_LENGTH_MAX = 40;
+
+/**
  * 一行一項的 textarea -> text[]。
  * 去掉前後空白與空行；使用者按 Enter 留白行是很自然的排版習慣，
  * 直接存進去前台就會冒出空的標籤 pill。
@@ -137,6 +182,22 @@ export function linesToArray(raw: string): string[] {
     .filter((line) => line.length > 0)
     .slice(0, LIST_LENGTH_MAX)
     .map((line) => line.slice(0, LIST_ITEM_MAX));
+}
+
+/**
+ * 內容區塊用的版本，上限放寬（見 CONTENT_ITEM_MAX 的說明）。
+ *
+ * ⚠️ 跟 linesToArray 一樣是**靜默截斷** —— 超過上限不會回錯誤給使用者。
+ *    上限訂得夠寬是刻意的，因為一個字都不能少的長文應該放 product_blocks
+ *    的 body（那裡沒有長度限制），不是塞進條列。
+ */
+export function contentLinesToArray(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, CONTENT_LENGTH_MAX)
+    .map((line) => line.slice(0, CONTENT_ITEM_MAX));
 }
 
 /** text[] -> textarea 的預設值 */
@@ -238,6 +299,10 @@ export const FORM_MESSAGES: Record<string, { tone: "ok" | "warn"; text: string }
   type_invalid: { tone: "warn", text: "課程類型不正確。" },
   session_time_invalid: { tone: "warn", text: "請填正確的開始與結束時間，結束必須晚於開始。" },
   session_capacity_invalid: { tone: "warn", text: "名額請填 0 或正整數。" },
+  session_price_invalid: {
+    tone: "warn",
+    text: "這一梯的價格請填 0 或正整數，或留空表示用課程定價。",
+  },
   session_duplicate: {
     tone: "warn",
     text: "這門課已經有一場相同開始時間的場次了，同一時間不能開兩場。",

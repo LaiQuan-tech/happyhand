@@ -21,6 +21,8 @@ import {
   toSessionStatus,
   type ProductType,
   type SessionStatus,
+  contentLinesToArray,
+  toSessionFormat,
 } from "./shared";
 
 /**
@@ -95,6 +97,7 @@ export async function upsertProduct(formData: FormData): Promise<void> {
     const subtitle = String(formData.get("subtitle") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const coverUrl = String(formData.get("cover_url") ?? "").trim();
+    const heroLead = String(formData.get("hero_lead") ?? "").trim();
 
     // ⚠️ 沒勾的 checkbox 根本不會出現在 FormData 裡，
     //    所以是比對 "on" 而不是 Boolean(...)。
@@ -156,6 +159,24 @@ export async function upsertProduct(formData: FormData): Promise<void> {
       tags: linesToArray(String(formData.get("tags") ?? "")),
       benefits: linesToArray(String(formData.get("benefits") ?? "")),
       sort_order: sortOrder,
+
+      // 報名頁內容。用 contentLinesToArray（40 項 × 200 字）而不是上面那個
+      // linesToArray（20 項 × 60 字）—— 課程大綱條目用 60 字寫不完。
+      hero_lead: heroLead ? heroLead.slice(0, 2000) : null,
+      suitable_for: contentLinesToArray(String(formData.get("suitable_for") ?? "")),
+      not_suitable_for: contentLinesToArray(
+        String(formData.get("not_suitable_for") ?? ""),
+      ),
+      outcomes: contentLinesToArray(String(formData.get("outcomes") ?? "")),
+      curriculum_online: contentLinesToArray(
+        String(formData.get("curriculum_online") ?? ""),
+      ),
+      curriculum_onsite: contentLinesToArray(
+        String(formData.get("curriculum_onsite") ?? ""),
+      ),
+      includes: contentLinesToArray(String(formData.get("includes") ?? "")),
+      notes: contentLinesToArray(String(formData.get("notes") ?? "")),
+      asks_intake: formData.get("asks_intake") === "on",
     };
 
     const db = createServiceClient();
@@ -197,7 +218,7 @@ export async function upsertProduct(formData: FormData): Promise<void> {
     const { data: before, error: beforeError } = await db
       .from("products")
       .select(
-        "id, type, slug, title, subtitle, description, price, compare_at_price, cover_url, is_published, is_featured, tags, benefits, sort_order",
+        "id, type, slug, title, subtitle, description, price, compare_at_price, cover_url, is_published, is_featured, tags, benefits, sort_order, hero_lead, suitable_for, not_suitable_for, outcomes, curriculum_online, curriculum_onsite, includes, notes, asks_intake",
       )
       .eq("id", id)
       .maybeSingle();
@@ -237,6 +258,16 @@ export async function upsertProduct(formData: FormData): Promise<void> {
       "tags",
       "benefits",
       "sort_order",
+      // 報名頁內容也要留稽核 —— 這些是對外文案，改錯了要查得到是誰改的
+      "hero_lead",
+      "suitable_for",
+      "not_suitable_for",
+      "outcomes",
+      "curriculum_online",
+      "curriculum_onsite",
+      "includes",
+      "notes",
+      "asks_intake",
     ]);
 
     // 代稱換掉＝舊網址從此 404。稽核摘要要看得出來，
@@ -556,6 +587,15 @@ export async function upsertSession(productId: string, formData: FormData): Prom
     const location = String(formData.get("location") ?? "").trim();
     const address = String(formData.get("address") ?? "").trim();
 
+    const sessionTitle = String(formData.get("title") ?? "").trim();
+    const sessionSummary = String(formData.get("summary") ?? "").trim();
+    const sessionNotes = String(formData.get("notes") ?? "").trim();
+    const sessionPrice = parseIntField(String(formData.get("price") ?? ""));
+    if (sessionPrice === undefined || (sessionPrice !== null && sessionPrice < 0)) {
+      destination = `/admin/products/${productId}?msg=session_price_invalid#sessions`;
+      return;
+    }
+
     const payload = {
       starts_at: startsAt,
       ends_at: endsAt,
@@ -563,6 +603,13 @@ export async function upsertSession(productId: string, formData: FormData): Prom
       address: address ? address.slice(0, 300) : null,
       capacity,
       status,
+      title: sessionTitle ? sessionTitle.slice(0, 200) : null,
+      summary: sessionSummary ? sessionSummary.slice(0, 300) : null,
+      format: toSessionFormat(formData.get("format")),
+      // ⚠️ 留空 = null = 用課程定價。0 是合法價格（免費場次），
+      //    所以這裡用 parseIntField 的 null/undefined 區分，不能用 falsy 判斷。
+      price: sessionPrice ?? null,
+      notes: sessionNotes ? sessionNotes.slice(0, 300) : null,
     };
 
     const db = createServiceClient();

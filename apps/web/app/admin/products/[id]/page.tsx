@@ -79,7 +79,7 @@ export default async function AdminProductEditPage({
     const { data, error } = await db
       .from("products")
       .select(
-        "id, type, slug, title, subtitle, description, price, compare_at_price, cover_url, is_published, is_featured, tags, benefits, sort_order",
+        "id, type, slug, title, subtitle, description, price, compare_at_price, cover_url, is_published, is_featured, tags, benefits, sort_order, hero_lead, suitable_for, not_suitable_for, outcomes, curriculum_online, curriculum_onsite, includes, notes, asks_intake",
       )
       .eq("id", id)
       .maybeSingle();
@@ -97,7 +97,7 @@ export default async function AdminProductEditPage({
         .order("sort_order", { ascending: true }),
       db
         .from("workshop_sessions")
-        .select("id, starts_at, ends_at, location, address, capacity, seats_taken, status")
+        .select("id, starts_at, ends_at, location, address, capacity, seats_taken, status, title, summary, format, price, notes")
         .eq("product_id", id)
         .order("starts_at", { ascending: true }),
     ]);

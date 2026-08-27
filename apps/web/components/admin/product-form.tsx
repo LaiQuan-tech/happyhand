@@ -181,6 +181,95 @@ export function ProductForm({ product }: { product: ProductRow | null }) {
         />
       </div>
 
+      {/*
+        報名頁內容。每一項留空，前台就整塊不顯示 —— 不會出現空標題配空清單，
+        所以不需要的區塊直接不填就好。
+
+        全部是「一行一項」的 textarea，跟上面的 tags/benefits 同一套操作方式，
+        但上限放寬到 40 項 × 每項 200 字（CONTENT_* 常數）：課程大綱的條目
+        用 60 字寫不完。
+      */}
+      <div className="flex flex-col gap-4 border-t border-line pt-6">
+        <div>
+          <h2 className="text-[15px] font-medium text-ink">報名頁內容</h2>
+          <p className="mt-1 text-[13px] text-ink-soft">
+            這些欄位會依序顯示在課程／工作坊的報名頁上。留空的區塊不會出現。
+          </p>
+        </div>
+
+        <AdminTextarea
+          name="hero_lead"
+          label="標題下方引言"
+          rows={4}
+          maxLength={2000}
+          defaultValue={product?.hero_lead ?? ""}
+          hint="可以分段（換行會保留）。放在課程名稱下方，用來說明這堂課想幫學員解決什麼。"
+        />
+
+        <AdminTextarea
+          name="suitable_for"
+          label="這堂課適合誰"
+          rows={5}
+          defaultValue={arrayToLines(product?.suitable_for)}
+          hint="一行一項。例如「想以簡單、安全的方式照顧自己與家人」。"
+        />
+
+        <AdminTextarea
+          name="not_suitable_for"
+          label="目前可能不適合"
+          rows={5}
+          defaultValue={arrayToLines(product?.not_suitable_for)}
+          hint="一行一項。與上一欄併成左右兩欄對照；兩欄都空就整塊不顯示。"
+        />
+
+        <AdminTextarea
+          name="outcomes"
+          label="學完之後可以做到什麼"
+          rows={5}
+          defaultValue={arrayToLines(product?.outcomes)}
+          hint="一行一項。例如「認識 26 個安全能量鎖及其基本位置」。"
+        />
+
+        <AdminTextarea
+          name="curriculum_online"
+          label="課程內容（線上）"
+          rows={5}
+          defaultValue={arrayToLines(product?.curriculum_online)}
+          hint="一行一項。純實體課程留空即可。"
+        />
+
+        <AdminTextarea
+          name="curriculum_onsite"
+          label="課程內容（實體）"
+          rows={5}
+          defaultValue={arrayToLines(product?.curriculum_onsite)}
+          hint="一行一項。純線上課程留空即可。只有一邊有內容就顯示一欄。"
+        />
+
+        <AdminTextarea
+          name="includes"
+          label="一次報名，全部帶走"
+          rows={4}
+          defaultValue={arrayToLines(product?.includes)}
+          hint="一行一項，會顯示成標籤。例如「15 小時線上預錄」「6 個月班級群組」。"
+        />
+
+        <AdminTextarea
+          name="notes"
+          label="來之前先知道"
+          rows={5}
+          defaultValue={arrayToLines(product?.notes)}
+          hint="一行一項的注意事項。例如「工具與講義我們準備，帶一顆放鬆的心來就好」。"
+        />
+
+        <AdminCheckbox
+          name="asks_intake"
+          label="結帳時詢問報名問題"
+          defaultChecked={product?.asks_intake ?? false}
+          hint="勾選後，客人結帳時要多回答學習經驗、想改善什麼、從哪得知，並勾選健康聲明。"
+        />
+      </div>
+
       <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
         <button type="submit" className={adminPrimaryButton}>
           {isNew ? "建立課程" : "儲存變更"}

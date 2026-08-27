@@ -6,6 +6,7 @@ import {
   SESSION_STATUS_CHOICES,
   SESSION_STATUS_LABEL,
   type SessionRow,
+  SESSION_FORMAT_CHOICES,
 } from "@/app/admin/products/shared";
 import { StatusChip, adminPrimaryButton } from "@/app/admin/products/ui";
 
@@ -109,6 +110,27 @@ function SessionFields({
       {session && <input type="hidden" name="session_id" value={session.id} />}
 
       <div className="grid grid-cols-1 gap-x-4 gap-y-3 admin:grid-cols-2">
+        {/*
+          梯次名稱與摘要。同一門課常常有好幾梯（假日班／平日線上班），
+          光靠日期客人分不出差別。留空時前台會用日期自己組一個。
+        */}
+        <AdminField
+          id={`session-title-${scope}`}
+          name="title"
+          label="梯次名稱"
+          maxLength={200}
+          defaultValue={session?.title ?? ""}
+          hint="例如「2026 年 9 月假日班」。留空就用日期顯示。"
+        />
+        <AdminField
+          id={`session-summary-${scope}`}
+          name="summary"
+          label="梯次摘要"
+          maxLength={300}
+          defaultValue={session?.summary ?? ""}
+          hint="一句話說明，例如「每天 7.5 小時，共 15 小時實體練習」。"
+        />
+
         <AdminDateTimeField
           id={`session-starts-${scope}`}
           name="starts_at"
@@ -154,6 +176,39 @@ function SessionFields({
               ? `已經有 ${session.seats_taken} 人報名，名額不能低於這個數字。`
               : undefined
           }
+        />
+
+        {/*
+          🔴 這一梯的價格。留空 = 用課程定價。
+             同一門課不同梯次價格可以差很多，所以 /api/orders 在算金額時
+             會優先讀這一欄（loadSessionPrices）。
+        */}
+        <AdminField
+          id={`session-price-${scope}`}
+          name="price"
+          label="這一梯的價格"
+          type="number"
+          min={0}
+          step={1}
+          defaultValue={session?.price ?? ""}
+          hint="留空就用課程定價。填了以這裡為準，客人結帳時收的就是這個金額。"
+        />
+
+        <AdminSelect
+          id={`session-format-${scope}`}
+          name="format"
+          label="上課形式"
+          defaultValue={session?.format ?? ""}
+          options={[{ value: "", label: "未指定" }, ...SESSION_FORMAT_CHOICES]}
+        />
+
+        <AdminField
+          id={`session-notes-${scope}`}
+          name="notes"
+          label="梯次補充說明"
+          maxLength={300}
+          defaultValue={session?.notes ?? ""}
+          hint="例如「直播連結於開課前發送」。"
         />
 
         <AdminSelect
