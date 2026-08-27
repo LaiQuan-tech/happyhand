@@ -27,6 +27,20 @@ export type Product = {
   benefits: string[];
   cover_url?: string | null;
   lessons?: Lesson[];
+  /**
+   * 報名頁內容（migration 20260827000003）。
+   * 全部 optional：DB 還沒填、或是舊的靜態 PRODUCTS 常數都不會有這些欄位，
+   * 前台一律用「空就整塊不顯示」處理。
+   */
+  hero_lead?: string | null;
+  suitable_for?: string[];
+  not_suitable_for?: string[];
+  outcomes?: string[];
+  curriculum_online?: string[];
+  curriculum_onsite?: string[];
+  includes?: string[];
+  notes?: string[];
+  asks_intake?: boolean;
 };
 
 export type WorkshopSession = {

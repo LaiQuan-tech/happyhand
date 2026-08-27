@@ -7,12 +7,31 @@ import { MobileActionBar } from "@/components/mobile-action-bar";
 import { SITE } from "@/lib/site";
 import { getProduct, getWorkshopSessions, getPublishedSlugs } from "@/lib/data";
 import { SessionRow } from "../_components/session-row";
+import {
+  BulletSection,
+  CompareSection,
+  LeadText,
+  TagCloud,
+} from "../_components/content-sections";
 import { NoSessions } from "../_components/no-sessions";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
 export const revalidate = 300;
+
 export const dynamicParams = true;
+/**
+ * 「來之前先知道」的預設內容。
+ * 後台沒填時用這一組 —— 這些話對每一場實體工作坊都適用，
+ * 不該逼客戶每開一場就重打一次。
+ */
+const DEFAULT_NOTES = [
+  "工具跟講義我們都準備好了，你空手來就行。",
+  "開課前七天跟我們說一聲，可以改期一次。",
+  "額滿了還是可以用 LINE 登記候補，有人取消我們會通知你。",
+  "膝蓋、腰不舒服都可以坐著做，現場有助教會陪你。",
+  "其他不確定的事，用 LINE 問我們，我們慢慢跟你講。",
+];
 
 export async function generateStaticParams() {
   const slugs = await getPublishedSlugs("workshop");
@@ -98,6 +117,9 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
           )}
           <p className="t-body text-brown-500">{product.description}</p>
 
+          {/* 後台「標題下方引言」。留空就不渲染，換行會保留。 */}
+          <LeadText text={product.hero_lead} />
+
           {product.benefits.length > 0 && (
             <ul className="mt-[10px] flex list-none flex-wrap gap-[10px]">
               {product.benefits.map((b) => (
@@ -144,6 +166,44 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
         </div>
       </section>
 
+      {/*
+        報名頁內容。全部來自後台，每一塊「資料為空就整塊不渲染」，
+        所以不需要的區塊留空不填即可，不會出現空標題。
+      */}
+      <div className="mx-auto flex w-full max-w-maxw flex-col gap-[40px] px-[20px] py-[40px] md:gap-[56px] md:px-[40px] md:py-[56px]">
+        <CompareSection
+          eyebrow="適合的對象"
+          title="這堂課適合誰、不適合誰"
+          leftTitle="適合"
+          leftItems={product.suitable_for}
+          rightTitle="目前可能不適合"
+          rightItems={product.not_suitable_for}
+        />
+
+        <BulletSection
+          eyebrow="學完之後"
+          title="你將能夠——"
+          items={product.outcomes}
+          tone="cream"
+        />
+
+        <CompareSection
+          eyebrow="課程內容"
+          title="這堂課會上什麼"
+          leftTitle="線上"
+          leftItems={product.curriculum_online}
+          rightTitle="實體練習"
+          rightItems={product.curriculum_onsite}
+        />
+
+        <TagCloud
+          eyebrow="完整配套"
+          title="一次報名，全部帶走"
+          items={product.includes}
+        />
+      </div>
+
+
       {/* 地點與注意事項 */}
       <section className="mx-auto max-w-maxw px-[20px] py-[32px] md:px-[40px] md:py-[48px]">
         <div className="flex flex-col gap-[24px] md:flex-row md:gap-[40px]">
@@ -183,13 +243,15 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
           <div className="md:flex-1">
             <h2 className="t-h3">來之前先知道</h2>
             <ul className="mt-[10px] flex list-none flex-col gap-[10px]">
-              {[
-                "工具跟講義我們都準備好了，你空手來就行。",
-                "開課前七天跟我們說一聲，可以改期一次。",
-                "額滿了還是可以用 LINE 登記候補，有人取消我們會通知你。",
-                "膝蓋、腰不舒服都可以坐著做，現場有助教會陪你。",
-                "其他不確定的事，用 LINE 問我們，我們慢慢跟你講。",
-              ].map((t) => (
+              {/*
+                後台「來之前先知道」欄位。原本這五條是寫死在這裡的字串陣列，
+                每開一個新工作坊都得改程式。留空時用同一組預設值，
+                所以舊資料不會突然變空白。
+              */}
+              {(product.notes && product.notes.length > 0
+                ? product.notes
+                : DEFAULT_NOTES
+              ).map((t) => (
                 <li
                   key={t}
                   className="t-body-sm flex gap-[10px] text-brown-500"

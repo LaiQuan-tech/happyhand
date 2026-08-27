@@ -33,7 +33,7 @@ type LessonRow = {
 };
 
 const PRODUCT_SELECT =
-  "id, slug, type, title, subtitle, description, price, compare_at_price, cover_url, is_featured, tags, benefits, sort_order";
+  "id, slug, type, title, subtitle, description, price, compare_at_price, cover_url, is_featured, tags, benefits, sort_order, hero_lead, suitable_for, not_suitable_for, outcomes, curriculum_online, curriculum_onsite, includes, notes, asks_intake";
 
 export async function getProducts(): Promise<ProductWithSessions[]> {
   if (!hasSupabaseEnv()) return [];
@@ -214,6 +214,15 @@ function mapProduct(row: Record<string, unknown>): ProductWithSessions {
     featured: (row.is_featured as boolean) ?? false,
     tags: (row.tags as string[]) ?? [],
     benefits: (row.benefits as string[]) ?? [],
+    hero_lead: (row.hero_lead as string | null) ?? null,
+    suitable_for: (row.suitable_for as string[] | null) ?? [],
+    not_suitable_for: (row.not_suitable_for as string[] | null) ?? [],
+    outcomes: (row.outcomes as string[] | null) ?? [],
+    curriculum_online: (row.curriculum_online as string[] | null) ?? [],
+    curriculum_onsite: (row.curriculum_onsite as string[] | null) ?? [],
+    includes: (row.includes as string[] | null) ?? [],
+    notes: (row.notes as string[] | null) ?? [],
+    asks_intake: Boolean(row.asks_intake),
     cover_url: (row.cover_url as string | null) ?? null,
     lessons: lessons.length ? lessons : undefined,
   };
