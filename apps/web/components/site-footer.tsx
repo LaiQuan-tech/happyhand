@@ -2,6 +2,25 @@ import Link from "next/link";
 import Image from "next/image";
 import { SITE, NAV_LINKS } from "@/lib/site";
 
+/**
+ * Facebook 圖示。內嵌 SVG，維持全站「不裝 icon 套件」的慣例
+ *（site-header.tsx 的購物車與會員圖示也是這樣做的）。
+ * currentColor 讓它跟著父層文字顏色走，hover 才會一起變。
+ */
+function FacebookIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="M24 12.073C24 5.446 18.627 0 12 0S0 5.446 0 12.073C0 18.062 4.388 23.027 10.125 23.927v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.313 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+}
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-sand-300 bg-white">
@@ -85,6 +104,19 @@ export function SiteFooter() {
           <p className="t-caption mt-[14px] text-brown-500">
             服務時間 週一至週五 10:00–18:00
           </p>
+
+          {/* 粉絲頁。同樣是站外連結，要自己帶 target/rel。
+              min-h-44px 是全站觸控區下限（客群 60–75 歲，手指點不準）。 */}
+          <a
+            href={SITE.facebookHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-[10px] inline-flex min-h-[44px] items-center gap-[8px] text-[17px] text-brown-500 transition-colors duration-200 hover:text-caramel-dk"
+          >
+            <FacebookIcon className="h-[20px] w-[20px] shrink-0" />
+            {SITE.facebookLabel}
+            <span className="sr-only">（會開啟 Facebook）</span>
+          </a>
         </div>
       </div>
 

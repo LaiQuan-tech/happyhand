@@ -30,6 +30,9 @@ export const SITE = {
   lineId: "@hao2082l",
   lineLabel: "LINE 好友",
   lineHref: "https://page.line.me/hao2082l",
+  /** Facebook 粉絲頁。與 lineHref 一樣是站外連結，<a> 要自己帶 target/rel。 */
+  facebookHref: "https://www.facebook.com/JSJSelfhelp",
+  facebookLabel: "Facebook 粉絲頁",
   address: "臺北市中山區新生北路三段 1 號 9 樓之 15",
   footerLine:
     "好日子股份有限公司・LINE @hao2082l・臺北市中山區新生北路三段 1 號 9 樓之 15",
