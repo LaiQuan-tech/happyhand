@@ -49,8 +49,15 @@ export function CheckoutView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
-  // 工作坊要收報名資料。用購物車裡的 type 判斷，不必為此多打一次 API。
-  const needsIntake = items.some((i) => i.type === "workshop");
+  // 要不要收報名資料，由後台的 products.asks_intake 決定，旗標在加入購物車
+  // 那一刻就帶進品項裡 —— 這頁是刻意保持靜態的，不為了這個旗標多打一次 API。
+  //
+  // 🔴 `?? i.type === "workshop"` 這個 fallback 不能拿掉：改版前就存在
+  //    localStorage 裡的購物車沒有這個欄位，拿掉會讓那些人的工作坊訂單
+  //    連健康聲明都不用勾。
+  const needsIntake = items.some(
+    (i) => i.asksIntake ?? i.type === "workshop",
+  );
 
   /**
    * 已登入的人不用重打資料。

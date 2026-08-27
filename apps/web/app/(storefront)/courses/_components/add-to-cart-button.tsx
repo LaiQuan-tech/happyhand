@@ -47,6 +47,7 @@ export function AddToCartButton({
       qty: 1,
       priceSnapshot: product.price,
       sessionId: null,
+      asksIntake: product.asks_intake,
     });
     setAdded(true);
   }

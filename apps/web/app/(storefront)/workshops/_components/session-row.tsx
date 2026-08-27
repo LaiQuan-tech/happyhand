@@ -162,6 +162,7 @@ export function SessionRow({
             title={headline}
             price={session.price}
             sessionLabel={sessionLabel}
+            asksIntake={session.asksIntake}
             ariaLabel={`我要報名：${headline} ${dateText}`}
           />
         )}

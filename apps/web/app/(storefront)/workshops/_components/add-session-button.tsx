@@ -25,6 +25,7 @@ export function AddSessionButton({
   title,
   price,
   sessionLabel,
+  asksIntake,
   ariaLabel,
   className = "",
 }: {
@@ -35,6 +36,8 @@ export function AddSessionButton({
   price: number;
   /** 給人看的場次說明，會顯示在購物車與訂單摘要，例如「9月12日（週六）09:30–17:00」 */
   sessionLabel: string;
+  /** 這門課結帳時要不要問報名問題（products.asks_intake） */
+  asksIntake?: boolean;
   ariaLabel?: string;
   className?: string;
 }) {
@@ -55,6 +58,7 @@ export function AddSessionButton({
       priceSnapshot: price,
       sessionId: sessionId ?? null,
       sessionLabel,
+      asksIntake,
     });
     router.push("/checkout");
   }

@@ -159,6 +159,12 @@ export type WorkshopRow = {
    * 頁面說剩 4 位、結帳卻說滿了，就是這樣來的。
    */
   held: number;
+  /**
+   * 這門課結帳時要不要問報名問題（products.asks_intake）。
+   * 帶到購物車品項上，讓 /checkout 不必為了這個旗標多打一次 API
+   * ——那一頁是刻意保持靜態的。
+   */
+  asksIntake: boolean;
 };
 
 export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
@@ -167,7 +173,7 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("workshop_sessions")
-      .select("*, products!inner(slug,title,subtitle,price,is_published)")
+      .select("*, products!inner(slug,title,subtitle,price,is_published,asks_intake)")
       .eq("products.is_published", true)
       .in("status", ["open", "full"])
       .order("starts_at", { ascending: true });
@@ -211,6 +217,7 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
       capacity: s.capacity,
       seats_taken: s.seats_taken,
       held: holds.get(s.id) ?? 0,
+      asksIntake: Boolean(s.products.asks_intake),
     }));
   } catch (err) {
     console.error("[data] getWorkshopSessions 例外", err);

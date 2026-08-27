@@ -18,6 +18,14 @@ export type CartItem = {
   priceSnapshot: number;
   sessionId?: string | null;
   sessionLabel?: string | null;
+  /**
+   * 結帳時要不要問報名問題。加入購物車那一刻從 products.asks_intake 帶進來。
+   *
+   * 🔴 舊的購物車沒有這個欄位（undefined），/checkout 會退回「工作坊就問」
+   *    的舊行為，不要改成 `?? false`：那會讓改版當下購物車裡已有工作坊的人
+   *    突然不用回答問題。
+   */
+  asksIntake?: boolean;
 };
 
 type CartContext = {
