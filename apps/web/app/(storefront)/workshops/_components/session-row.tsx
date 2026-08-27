@@ -25,7 +25,13 @@ export function SessionRow({
   showTitle?: boolean;
 }) {
   const { month, day, weekday } = twDate(session.starts_at);
-  const remaining = session.capacity - session.seats_taken;
+  // 扣掉未付款訂單佔住的位子，跟 /api/orders 的容量檢查用同一個定義
+  // （兩邊都以 workshop_holds() 為準），否則會出現「頁面說剩 4 位、
+  // 結帳卻說滿了」。
+  const remaining = Math.max(
+    0,
+    session.capacity - session.seats_taken - (session.held ?? 0),
+  );
   const soldOut = remaining <= 0;
   const almostFull = remaining <= 5;
 

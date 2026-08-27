@@ -128,6 +128,12 @@ export type WorkshopRow = {
   address: string;
   capacity: number;
   seats_taken: number;
+  /**
+   * 被「有效的未付款訂單」佔住的名額數（來自 workshop_holds() RPC）。
+   * 顯示剩餘名額時一定要扣掉它，否則會跟 /api/orders 的容量檢查算出不同答案 ——
+   * 頁面說剩 4 位、結帳卻說滿了，就是這樣來的。
+   */
+  held: number;
 };
 
 export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
@@ -145,6 +151,24 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
       console.error("[data] getWorkshopSessions 失敗", error.message);
       return [];
     }
+
+    // 未付款訂單佔住的名額。走 security definer RPC，因為這裡是 anon client，
+    // 直接讀 orders/order_items 會被 RLS 擋掉。
+    // 拿不到就當作 0 —— 顯示樂觀一點也不能讓整頁掛掉。
+    const holds = new Map<string, number>();
+    const { data: holdRows, error: holdError } =
+      await supabase.rpc("workshop_holds");
+    if (holdError) {
+      console.error("[data] workshop_holds 失敗", holdError.message);
+    } else {
+      for (const h of (holdRows ?? []) as {
+        session_id: string;
+        held: number;
+      }[]) {
+        holds.set(h.session_id, h.held);
+      }
+    }
+
     return (data ?? []).map((s) => ({
       id: s.id,
       slug: s.products.slug,
@@ -157,6 +181,7 @@ export async function getWorkshopSessions(): Promise<WorkshopRow[]> {
       address: s.address,
       capacity: s.capacity,
       seats_taken: s.seats_taken,
+      held: holds.get(s.id) ?? 0,
     }));
   } catch (err) {
     console.error("[data] getWorkshopSessions 例外", err);

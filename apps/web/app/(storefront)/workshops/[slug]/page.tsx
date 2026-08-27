@@ -54,7 +54,9 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
   if (!product || product.type !== "workshop") notFound();
 
   const sessions = allSessions.filter((s) => s.slug === slug);
-  const openSession = sessions.find((s) => s.capacity - s.seats_taken > 0);
+  const openSession = sessions.find(
+    (s) => s.capacity - s.seats_taken - (s.held ?? 0) > 0,
+  );
   const venue = sessions[0];
   const address = venue?.address ?? SITE.address;
   const venueName = venue?.location ?? "好日子・台北教室";

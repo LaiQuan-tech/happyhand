@@ -389,19 +389,28 @@ async function checkSessionCapacity(
       return null; // 讀不到就不擋，寧可讓客服事後處理也不要擋掉真的想報名的人
     }
 
-    // 已下單但還沒付款的數量
-    const { data: pendingItems } = await supabase
-      .from("order_items")
-      .select("session_id, qty, orders!inner(status)")
-      .in("session_id", ids)
-      .eq("orders.status", "pending");
-
+    // 已下單但還沒付款、且還在佔位時效內的數量。
+    //
+    // 走 workshop_holds() RPC 而不是自己查 order_items，是為了跟前台顯示
+    // （lib/data.ts → session-row.tsx）用**同一個定義**。這兩邊曾經各算各的：
+    // 前台是 capacity - seats_taken，這裡是 capacity - seats_taken - 所有 pending，
+    // 於是頁面說剩 4 位、結帳卻說滿了。
+    //
+    // 時效由 seat_hold_window()（目前 30 分鐘）決定 —— 沒有它的話，客人下單
+    // 不付款就會把位子永遠佔住，而原本設計來回收的 seat_holds 表
+    // 從來沒有被寫入過。
     const pending = new Map<string, number>();
-    for (const it of (pendingItems ?? []) as {
-      session_id: string;
-      qty: number;
-    }[]) {
-      pending.set(it.session_id, (pending.get(it.session_id) ?? 0) + it.qty);
+    const { data: holdRows, error: holdError } =
+      await supabase.rpc("workshop_holds");
+    if (holdError) {
+      console.error("[orders] workshop_holds 失敗，改用保守值", holdError.message);
+    } else {
+      for (const h of (holdRows ?? []) as {
+        session_id: string;
+        held: number;
+      }[]) {
+        if (ids.includes(h.session_id)) pending.set(h.session_id, h.held);
+      }
     }
 
     for (const s of (sessions ?? []) as {
