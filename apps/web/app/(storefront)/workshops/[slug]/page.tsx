@@ -207,13 +207,15 @@ export default async function WorkshopDetailPage({ params }: PageProps) {
         <p className="mt-[28px] t-caption text-brown-300">{SITE.disclaimer}</p>
       </section>
 
+      {/*
+        手機底部列捲到場次區，不直接跳結帳 ——
+        原本是連 /checkout?session=<id>，但沒有任何地方讀那個參數，
+        客人會落到「購物車還是空的」。而且這頁可能有好幾場，
+        替客人選一場也不對，讓他自己挑日子比較合理。
+      */}
       <MobileActionBar
-        href={
-          openSessionKey
-            ? `/checkout?session=${encodeURIComponent(openSessionKey)}`
-            : "/workshops"
-        }
-        label={openSessionKey ? "我要報名" : "看其他場次"}
+        href={openSessionKey ? "#sessions" : "/workshops"}
+        label={openSessionKey ? "看場次報名" : "看其他場次"}
       />
     </div>
   );

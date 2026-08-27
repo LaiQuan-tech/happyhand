@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { LinkButton, buttonClass } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
 import { SITE, formatPrice } from "@/lib/site";
 import { timeRange, twDate, type WorkshopRow } from "@/lib/data";
+import { AddSessionButton } from "./add-session-button";
 
 /**
  * 工作坊場次列。
@@ -43,8 +44,13 @@ export function SessionRow({
 
   // 語音朗讀用的完整日期，例如「9月12日（週六）」
   const dateText = `${monthLabel}${dayLabel}日（${weekday}）`;
-  const sessionKey = session.id ?? `${session.slug}@${session.starts_at}`;
-  const checkoutHref = `/checkout?session=${encodeURIComponent(sessionKey)}`;
+  // 場次時段，會跟著訂單一路顯示到購物車與訂單摘要
+  const sessionLabel = `${dateText} ${timeRange(session.starts_at, session.ends_at)}`;
+
+  // 沒有 id 就報不了名 —— /api/orders 用 UUID_RE 驗 sessionId，
+  // 收到非 UUID 會當成「沒選場次」，訂單就不會綁到這一場、名額也不會扣。
+  // 與其讓客人下一張沒有場次的單，不如導去 LINE 讓客服處理。
+  const canRegister = Boolean(session.id);
 
   // 地點與時間。有標題時排在標題下方；沒有標題（單場詳情頁）時直接接在日期方塊旁邊
   const locationLine = (
@@ -118,7 +124,7 @@ export function SessionRow({
       {/* CTA */}
       {/* min-w 讓「已額滿・我要候補」與「我要報名」佔一樣寬的欄，各列價格才會對齊 */}
       <div className="mt-[14px] md:col-start-4 md:row-span-2 md:row-start-1 md:mt-0 md:flex md:min-w-[208px] md:justify-end">
-        {soldOut ? (
+        {soldOut || !canRegister ? (
           <a
             href={SITE.lineHref}
             target="_blank"
@@ -130,18 +136,24 @@ export function SessionRow({
             })}
           >
             {/* 視覺文案與朗讀文案分開：畫面看得出額滿，語音直接說可以用 LINE 候補 */}
-            <span aria-hidden="true">已額滿・我要候補</span>
-            <span className="sr-only">已額滿，用 LINE 登記候補（會開啟 LINE）</span>
+            <span aria-hidden="true">
+              {soldOut ? "已額滿・我要候補" : "用 LINE 報名"}
+            </span>
+            <span className="sr-only">
+              {soldOut
+                ? "已額滿，用 LINE 登記候補（會開啟 LINE）"
+                : "用 LINE 報名這一場（會開啟 LINE）"}
+            </span>
           </a>
         ) : (
-          <LinkButton
-            href={checkoutHref}
-            variant="dark"
-            className="w-full whitespace-nowrap md:w-auto"
-            aria-label={`我要報名：${session.title} ${dateText}`}
-          >
-            我要報名
-          </LinkButton>
+          <AddSessionButton
+            sessionId={session.id}
+            slug={session.slug}
+            title={session.title}
+            price={session.price}
+            sessionLabel={sessionLabel}
+            ariaLabel={`我要報名：${session.title} ${dateText}`}
+          />
         )}
       </div>
     </li>
