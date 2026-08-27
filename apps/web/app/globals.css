@@ -71,6 +71,10 @@
   --color-line-strong: var(--color-sand-400);
   --color-accent: var(--color-caramel-ink);
   --color-ok: #3f6b4a; /* 6.15:1 on white、5.57:1 on cream-200，與焦糖同為低彩度暖調 */
+  /* 成功訊息的底色。--color-ok 在它上面是 5.50:1（AA 通過）。
+     ⚠️ 之前 /admin 的成功訊息寫了 bg-ok-soft 但這個 token 根本不存在，
+     Tailwind 生不出那條規則，底色是透明的。加在這裡把它補實。 */
+  --color-ok-soft: #eef4ec;
   --color-danger: var(--color-error);
 
   /* 以下四個是我額外加的，理由寫在各自後面（見交付說明）。 */

@@ -1,6 +1,7 @@
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/components/cart-provider";
+import { HelperWidget } from "@/components/ai/helper-widget";
 
 /**
  * 前台外殼。
@@ -29,6 +30,9 @@ export default function StorefrontLayout({
       <SiteHeader />
       <main id="main">{children}</main>
       <SiteFooter />
+      {/* AI 小幫手。放在 SiteFooter 之後，浮動定位不影響版面流。
+          後台有自己的 layout，不會載到這支。 */}
+      <HelperWidget />
     </CartProvider>
   );
 }

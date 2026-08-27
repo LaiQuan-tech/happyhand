@@ -47,6 +47,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     primary: true,
   },
   {
+    // 諮詢紀錄裡有訪客留的姓名／Email／電話，跟訂單同等敏感，
+    // 所以走 orders:read —— editor 看不到，這是刻意的。
+    href: "/admin/inquiries",
+    label: "小幫手諮詢",
+    capability: "orders:read",
+    icon: "M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5Z",
+  },
+  {
     href: "/admin/products",
     label: "課程與工作坊",
     capability: "catalog:read",
