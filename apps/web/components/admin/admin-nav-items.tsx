@@ -60,6 +60,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "M16 20v-1a4 4 0 0 0-8 0v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 9v-1a4 4 0 0 0-3-3.9",
   },
   {
+    href: "/admin/settings",
+    label: "網站設定",
+    capability: "catalog:write",
+    icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3c0-.4 0-.8-.1-1.2l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2-1.2L14.6 3h-4l-.4 2.6a7.5 7.5 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5a7.4 7.4 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7.5 7.5 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z",
+  },
+  {
     href: "/admin/audit",
     label: "稽核紀錄",
     capability: "audit:read",
