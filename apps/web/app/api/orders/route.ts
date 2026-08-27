@@ -198,16 +198,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // 梯次價優先於商品價。要在算 lines 之前拿到。
+  const sessionPrices = await loadSessionPrices(
+    supabase,
+    parsed.map((i) => i.sessionId).filter((id) => UUID_RE.test(id)),
+  );
+
   const lines: Line[] = parsed.map((it) => {
     const known = priceBook.get(it.slug);
     const fallback =
       Number.isInteger(it.snapshot) && it.snapshot >= 0 ? it.snapshot : 0;
+    // 🔴 用 ?? 不是 || —— 0 元是合法的梯次價（免費場次），|| 會把它當成沒設定。
+    const sessionPrice = UUID_RE.test(it.sessionId)
+      ? sessionPrices.get(it.sessionId)
+      : undefined;
     return {
       slug: it.slug,
       title: it.title,
       type: it.type,
       qty: it.qty,
-      unit_price: known ? known.price : fallback,
+      unit_price: sessionPrice ?? (known ? known.price : fallback),
       product_id: known?.id ?? (UUID_RE.test(it.productId) ? it.productId : null),
       session_id: UUID_RE.test(it.sessionId) ? it.sessionId : null,
       session_label: it.sessionLabel || null,
@@ -467,6 +477,43 @@ async function checkSessionCapacity(
  *
  * 查不到就是查不到，讓呼叫端拒單 —— 少賣一筆的代價遠低於收錯錢。
  */
+/**
+ * 各梯次自己的價格。
+ *
+ * 🔴 同一門工作坊的不同梯次價格可以差很多（客戶現有站上從 1,200 到 12,800 都有），
+ *    所以 workshop_sessions.price 有值時**優先於** products.price。
+ *    漏掉這一支就是照商品定價收錢 —— 客人選了 1,200 的梯次卻被扣 12,000。
+ *
+ * null 代表這一梯沒有自訂價，回退商品價。**0 是合法價格**（免費場次），
+ * 所以呼叫端一定要用 `??` 而不是 `||` 來取值。
+ */
+async function loadSessionPrices(
+  supabase: ServiceClient | null,
+  sessionIds: string[],
+) {
+  const prices = new Map<string, number>();
+  const wanted = [...new Set(sessionIds.filter(Boolean))];
+  if (!supabase || wanted.length === 0) return prices;
+
+  try {
+    const { data, error } = await supabase
+      .from("workshop_sessions")
+      .select("id,price")
+      .in("id", wanted);
+    if (error) {
+      // 讀不到就回退商品價。不擋單 —— 但要留 log，因為金額可能不是客人看到的那個。
+      console.error("[orders] 讀場次價格失敗，改用商品定價", error.message);
+      return prices;
+    }
+    for (const row of (data ?? []) as { id: string; price: number | null }[]) {
+      if (typeof row.price === "number") prices.set(row.id, row.price);
+    }
+  } catch (err) {
+    console.error("[orders] 讀場次價格例外", err);
+  }
+  return prices;
+}
+
 async function loadPriceBook(supabase: ServiceClient | null, slugs: string[]) {
   const wanted = new Set(slugs);
   const book = new Map<string, { id: string | null; price: number }>();
