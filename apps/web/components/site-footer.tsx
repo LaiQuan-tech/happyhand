@@ -40,7 +40,9 @@ export function SiteFooter() {
           <p className="t-body-sm mt-[16px] text-brown-500">
             {SITE.company} {SITE.companyEn}
             <br />
-            統一編號 {SITE.taxId}・代表人 {SITE.representative}
+            {/* 代表人姓名不放頁尾（客戶要求）。/terms 的負責人欄位是法規需要、
+                /about 的公司資訊表是介紹用，那兩處保留。 */}
+            統一編號 {SITE.taxId}
             <br />
             {SITE.address}
           </p>
