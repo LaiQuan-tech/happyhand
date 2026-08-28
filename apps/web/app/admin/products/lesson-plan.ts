@@ -45,6 +45,8 @@ export type SubmittedLesson = {
   duration_sec: number | null;
   youtube_id: string | null;
   free_preview: boolean;
+  /** 這一堂的文字說明。空一行分段，渲染時才切。 */
+  body: string | null;
 };
 
 export type LessonPlan = {
@@ -59,6 +61,7 @@ export type LessonPlan = {
     duration_sec: number | null;
     youtube_id: string | null;
     free_preview: boolean;
+    body: string | null;
     sort_order: number;
   }[];
   /** Phase 2：新增的列（沒有 id，交給資料庫產生） */
@@ -67,6 +70,7 @@ export type LessonPlan = {
     duration_sec: number | null;
     youtube_id: string | null;
     free_preview: boolean;
+    body: string | null;
     sort_order: number;
   }[];
   /** 送上來的 id 有哪些在資料庫裡找不到（表單過期或被動過手腳） */
@@ -117,6 +121,7 @@ export function planLessonWrites(
       title: row.title,
       duration_sec: row.duration_sec,
       youtube_id: row.youtube_id,
+      body: row.body,
       free_preview: row.free_preview,
       sort_order: sortOrder,
     };
@@ -200,6 +205,7 @@ export async function applyLessonPlan(
         title: row.title,
         duration_sec: row.duration_sec,
         youtube_id: row.youtube_id,
+        body: row.body,
         free_preview: row.free_preview,
         sort_order: row.sort_order,
       })

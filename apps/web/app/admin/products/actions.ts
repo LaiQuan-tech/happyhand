@@ -487,6 +487,16 @@ export async function saveLessons(
         ),
         youtube_id: youtubeId,
         free_preview: formData.get(`lessons.${i}.free_preview`) === "on",
+        // 🔴 先把 CRLF 正規化成 LF。HTML 規格規定 textarea 送出時換行一律
+        //    變成 \r\n，而渲染端是用「連續兩個換行」分段 —— \r\n\r\n 的兩個
+        //    \n 中間夾著 \r，任何 /\n{2,}/ 都切不開，整篇會擠成一大段。
+        //    這個 bug 不會有任何錯誤訊息，只會讓排版看起來「怪怪的」。
+        // 8000 字約 4 頁 A4，夠寫一堂課的說明；再長就該做成講義 PDF。
+        body:
+          String(formData.get(`lessons.${i}.body`) ?? "")
+            .replace(/\r\n?/g, "\n")
+            .trim()
+            .slice(0, 8000) || null,
       });
     }
 

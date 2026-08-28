@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient, hasSupabaseEnv } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { checkLessonAccess } from "@/lib/account/lesson-access";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +27,6 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** 統一的回應。403 一律不帶 videoId —— 這是最重要的一條。 */
 function deny(message: string, status: number) {
   return NextResponse.json(
@@ -39,75 +38,11 @@ function deny(message: string, status: number) {
 export async function POST(_request: Request, { params }: Params) {
   const { id } = await params;
 
-  if (!UUID_RE.test(id)) {
-    return deny("找不到這個單元。", 404);
-  }
-  if (!hasSupabaseEnv()) {
-    return deny("影片服務暫時無法使用，請稍後再試。", 503);
-  }
-
-  const supabase = await createClient();
-
-  // 1) 這一堂是哪一門課的、是不是免費試看
-  //
-  // 用使用者自己的 session client：course_lessons 的 RLS 只給
-  // 「已上架的課」或「自己買過的課」，所以連讀得到這一列本身就是一道檢查。
-  // ⚠️ 這裡不能 select("*") —— youtube_id 沒有 grant 給 authenticated，
-  //    帶 * 會整個查詢 42501。
-  const { data: lesson, error: lessonError } = await supabase
-    .from("course_lessons")
-    .select("id, product_id, free_preview, duration_sec")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (lessonError) {
-    console.error("[lessons/video] 讀取單元失敗", id, lessonError.message);
-    return deny("讀取失敗，請重新整理後再試一次。", 500);
-  }
-  if (!lesson) {
-    return deny("找不到這個單元。", 404);
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // 2) 授權判斷。free_preview 走同一條程式路徑，只是條件不同 ——
-  //    另外開一支公開的 endpoint 就會變成第二個要維護的權限邊界。
-  let allowed = lesson.free_preview === true;
-
-  if (!allowed) {
-    if (!user) {
-      return deny("這一堂要買了課才看得到。登入之後就可以繼續。", 401);
-    }
-
-    // entitlements_select_own 這條 RLS 本身就是授權檢查：
-    // 查得到那一列，就代表這是他自己的權限。不需要在這裡比對 user_id。
-    const { data: entitlement, error: entError } = await supabase
-      .from("entitlements")
-      .select("expires_at")
-      .eq("product_id", lesson.product_id)
-      .maybeSingle();
-
-    if (entError) {
-      console.error("[lessons/video] 讀取權限失敗", id, entError.message);
-      return deny("讀取失敗，請重新整理後再試一次。", 500);
-    }
-    if (!entitlement) {
-      return deny("這一堂要買了課才看得到。", 403);
-    }
-
-    const expiresAt = entitlement.expires_at as string | null;
-    if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-      return deny(
-        "這門課的觀看期限已經到了。想繼續看的話用 LINE 跟我們說一聲。",
-        403,
-      );
-    }
-    allowed = true;
-  }
-
-  if (!allowed) return deny("這一堂要買了課才看得到。", 403);
+  // 授權判斷抽到 lib/account/lesson-access.ts —— 講義端點用的是同一支。
+  // 兩邊各寫一份的話遲早漂移，而漂移的方向永遠是「有一邊變寬」。
+  const access = await checkLessonAccess(id, "lessons/video");
+  if (!access.ok) return deny(access.message, access.status);
+  const { lesson, userId } = access;
 
   // 3) 到這裡才拿 ID。youtube_id 只有 service role 讀得到（欄位級 grant）。
   let videoId: string | null = null;
@@ -137,7 +72,8 @@ export async function POST(_request: Request, { params }: Params) {
 
   // 4) 上次看到哪裡（用來做「從上次的 12:34 繼續看」）
   let resumeAt = 0;
-  if (user) {
+  if (userId) {
+    const supabase = await createClient();
     const { data: progress } = await supabase
       .from("lesson_progress")
       .select("position_sec")

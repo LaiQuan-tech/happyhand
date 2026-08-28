@@ -92,7 +92,17 @@ export type LessonRow = {
   /** YouTube 影片 ID（11 碼）。影片改放 YouTube 之後 video_path 已停用。 */
   youtube_id: string | null;
   free_preview: boolean;
+  body: string | null;
   sort_order: number;
+  /** 巢狀撈進來的講義與插圖（見 app/admin/products/[id]/page.tsx 的 select） */
+  lesson_materials?: {
+    id: string;
+    kind: "file" | "image";
+    file_name: string;
+    size_bytes: number;
+    caption: string | null;
+    sort_order: number;
+  }[];
 };
 
 export type BlockRow = {

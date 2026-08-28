@@ -3,6 +3,10 @@
 import { useActionState, useState } from "react";
 import { saveLessons, type LessonSaveState } from "@/app/admin/products/actions";
 import { splitDuration, type LessonRow } from "@/app/admin/products/shared";
+import {
+  LessonMaterialsField,
+  type MaterialItem,
+} from "@/components/admin/lesson-materials-field";
 import { youTubeWatchUrl } from "@/lib/youtube";
 import {
   AdminFieldLabel,
@@ -47,6 +51,10 @@ type Row = {
   /** 完整的 YouTube 網址（存的是 11 碼 ID，這裡回填成網址方便同事點開確認） */
   youtubeUrl: string;
   freePreview: boolean;
+  /** 這一堂的文字說明。空一行分段。 */
+  body: string;
+  /** 已上傳的講義與插圖。新增的列一定是空的（還沒有 lesson id）。 */
+  materials: MaterialItem[];
 };
 
 function toRow(lesson: LessonRow): Row {
@@ -59,6 +67,8 @@ function toRow(lesson: LessonRow): Row {
     sec,
     youtubeUrl: lesson.youtube_id ? youTubeWatchUrl(lesson.youtube_id) : "",
     freePreview: lesson.free_preview,
+    body: lesson.body ?? "",
+    materials: lesson.lesson_materials ?? [],
   };
 }
 
@@ -73,6 +83,8 @@ function blankRow(): Row {
     sec: 0,
     youtubeUrl: "",
     freePreview: false,
+    body: "",
+    materials: [],
   };
 }
 
@@ -239,6 +251,39 @@ export function LessonEditor({
                     ——設成「公開」的話任何人搜尋得到，設成「私人」的話學員會看不到。
                   </p>
                 </div>
+
+                <div className="admin:col-span-2">
+                  <AdminFieldLabel htmlFor={`lesson-body-${row.rowKey}`}>
+                    這一堂的文字內容
+                  </AdminFieldLabel>
+                  <textarea
+                    id={`lesson-body-${row.rowKey}`}
+                    name={`lessons.${index}.body`}
+                    defaultValue={row.body}
+                    rows={6}
+                    maxLength={8000}
+                    placeholder="留空的話學員端就不會出現這一區"
+                    aria-describedby={`lesson-body-hint-${row.rowKey}`}
+                    className={`${adminControlClass} ${adminBorderClass()} min-h-32 py-2.5 leading-relaxed`}
+                  />
+                  <p
+                    id={`lesson-body-hint-${row.rowKey}`}
+                    className="mt-1.5 text-[13px] text-ink-soft"
+                  >
+                    空一行分段。學員會在影片下方看到這段文字。
+                  </p>
+                </div>
+
+                <LessonMaterialsField
+                  lessonId={row.id}
+                  kind="file"
+                  initial={row.materials.filter((m) => m.kind === "file")}
+                />
+                <LessonMaterialsField
+                  lessonId={row.id}
+                  kind="image"
+                  initial={row.materials.filter((m) => m.kind === "image")}
+                />
 
                 <label
                   htmlFor={`lesson-free-${row.rowKey}`}

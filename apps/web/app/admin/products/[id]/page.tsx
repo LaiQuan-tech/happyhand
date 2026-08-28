@@ -124,7 +124,12 @@ export default async function AdminProductEditPage({
     const [lessonResult, sessionResult, blockResult] = await Promise.all([
       db
         .from("course_lessons")
-        .select("id, title, duration_sec, youtube_id, free_preview, sort_order")
+        .select(
+          "id, title, duration_sec, youtube_id, free_preview, body, sort_order, " +
+            // 講義與插圖一次撈進來，不要讓每個 LessonEditor 的列各自 fetch
+            // 一次（27 堂課就是 27 個請求）。
+            "lesson_materials(id, kind, file_name, size_bytes, caption, sort_order)",
+        )
         .eq("product_id", id)
         .order("sort_order", { ascending: true }),
       db

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatClock } from "@/components/account/youtube-api";
 import { LessonPlayer } from "./player";
+import { LessonContent } from "./lesson-content";
 
 /**
  * 上課教室。
@@ -84,6 +85,11 @@ export function Classroom({
           watermark={watermark}
           onCompleted={handleCompleted}
         />
+
+        {/* 文字說明、插圖、可下載的講義。三塊都空的話整區不出現。
+            key 跟播放器一樣掛 current.id：換單元時要整個重來，
+            不然會看到上一堂的內容停在畫面上。 */}
+        <LessonContent key={`content-${current.id}`} lessonId={current.id} />
 
         {/* 「下一堂課」帶課名。長輩看不懂純箭頭，需要文字。 */}
         {next ? (
