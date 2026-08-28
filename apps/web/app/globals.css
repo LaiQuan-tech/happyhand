@@ -214,3 +214,37 @@
     }
   }
 }
+
+
+/* ──────────────────────────────────────────────────────────────
+   會員中心側欄的收合狀態。
+
+   🔴 刻意寫在所有 @layer 之外：unlayered 規則贏過所有 Tailwind utility，
+      所以 .account-aside / .account-nav-toggle 的 display 一律由這裡決定，
+      在 JSX 上加 hidden / flex 是沒有用的。
+
+   狀態來源是 .account-scope 這個 wrapper 上的 data-account-nav，
+   由 account/layout.tsx 從 cookie 讀好、server 直接渲染進 HTML
+   （見 account/_components/nav-state.ts 說明為何不用 localStorage + inline script）。
+
+   刻意不做寬度動畫：全域 prefers-reduced-motion 會把 transition 關掉，
+   造成兩種不一致的體驗，而且 animate grid-template-columns 很貴。
+   ────────────────────────────────────────────────────────────── */
+
+.account-nav-toggle {
+  display: none; /* lg 以下根本沒有側欄，這顆按鈕沒有意義 */
+}
+
+@media (min-width: 1280px) { /* = --breakpoint-lg */
+  .account-nav-toggle {
+    display: inline-flex;
+  }
+
+  .account-scope[data-account-nav="collapsed"] .account-aside {
+    display: none;
+  }
+  .account-scope[data-account-nav="collapsed"] .account-grid {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+  }
+}

@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getMember, claimGuestOrders } from "@/lib/account/guard";
-import { AccountSidebar, AccountBottomNav } from "./_components/account-nav";
+import { AccountBottomNav } from "./_components/account-nav";
+import { AccountShell } from "./_components/account-shell";
+import { ACCOUNT_NAV_COOKIE, toNavState } from "./_components/nav-state";
 
 /**
  * 會員中心外殼。
@@ -29,19 +32,16 @@ export default async function AccountLayout({
 
   await claimGuestOrders();
 
+  // 側欄收合狀態。這一頁本來就是動態的（getMember 要讀 cookie），
+  // 多讀一個 cookie 成本是零，換來「server 送出的 HTML 第一個位元組就是對的」。
+  const navState = toNavState((await cookies()).get(ACCOUNT_NAV_COOKIE)?.value);
+
   return (
     // pb-[92px]：手機底部分頁的高度 + 呼吸空間。
     // 不用 .pb-action-bar 是因為那個是給 MobileActionBar 用的，
     // 兩者不會同時出現（見 account-nav.tsx 的註解），但數值不同。
     <div className="bg-white pb-[92px] lg:pb-0">
-      <div className="mx-auto max-w-maxw px-[20px] py-[26px] md:px-[40px] md:py-[40px]">
-        <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-[48px]">
-          <aside className="lg:sticky lg:top-[100px] lg:self-start">
-            <AccountSidebar />
-          </aside>
-          <div className="min-w-0">{children}</div>
-        </div>
-      </div>
+      <AccountShell initialState={navState}>{children}</AccountShell>
       <AccountBottomNav />
     </div>
   );
