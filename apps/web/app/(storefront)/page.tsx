@@ -5,7 +5,12 @@ import { LinkButton } from "@/components/ui/button";
 import { Figure } from "@/components/ui/placeholder";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { REASONS, TEACHER } from "@/lib/content";
-import { getProducts, getWorkshopSessions } from "@/lib/data";
+import {
+  getProducts,
+  getSiteSetting,
+  getWorkshopSessions,
+  type TeacherSetting,
+} from "@/lib/data";
 import { SITE, formatPrice } from "@/lib/site";
 import { HomeWorkshops } from "./_components/home-workshops";
 
@@ -46,9 +51,11 @@ const [footerLineBeforeLine, footerLineAfterLine] = SITE.footerLine.split(
 );
 
 export default async function HomePage() {
-  const [all, sessions] = await Promise.all([
+  // 併成一次 Promise.all：三個查詢彼此無關，串著等會多花兩趟往返
+  const [all, sessions, teacher] = await Promise.all([
     getProducts(),
     getWorkshopSessions(),
+    getSiteSetting<TeacherSetting>("teacher"),
   ]);
   const courses = all.filter((p) => p.type === "course");
 
@@ -181,9 +188,13 @@ export default async function HomePage() {
                     }`}
                   >
                     <Figure
+                      /* /courses、/courses/[slug]、/account 都有傳 cover_url，
+                         只有首頁漏掉 —— 後台上傳封面之後這裡不會跟著換。 */
+                      src={product.cover_url}
                       rounded="rounded-full"
                       alt={`${product.title} 課程縮圖`}
                       className="mx-auto h-[76px] w-[76px] shrink-0 md:h-[96px] md:w-[96px]"
+                      sizes="96px"
                     />
                     <h3 className="mt-[16px] font-serif text-[19px] leading-[1.55] md:mt-[22px] md:text-[22px]">
                       {product.title}
@@ -231,10 +242,14 @@ export default async function HomePage() {
         className="mx-auto grid max-w-[1100px] gap-[28px] px-[20px] py-[40px] md:grid-cols-[0.85fr_1.15fr] md:items-center md:gap-[56px] md:px-[40px] md:py-[80px]"
       >
         <Figure
+          /* 照片放在 site_settings，後台 /admin/settings 換一次三頁一起換。
+             沒設定時 Figure 自己會退回斜紋佔位圖。 */
+          src={teacher?.photo_url}
           rounded="rounded-[999px_999px_28px_28px]"
           label="柳樺老師教學照"
           alt="劉柳樺老師教學照"
           className="mx-auto aspect-[4/5] w-full max-w-[300px] md:max-w-none"
+          sizes="(min-width: 768px) 42vw, 300px"
         />
         <div>
           <p className="t-eyebrow text-caramel-ink">{TEACHER.eyebrow}</p>
