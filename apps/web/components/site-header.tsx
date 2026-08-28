@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { NAV_LINKS, SITE } from "@/lib/site";
 import { useCart } from "@/components/cart-provider";
+import { lockBodyScroll } from "@/lib/scroll-lock";
+import { useHelper } from "@/components/ai/helper-provider";
 
 /** 購物車圖示。維持專案「不裝 icon 套件」的作法，直接內嵌 SVG。 */
 function CartIcon({ className = "" }: { className?: string }) {
@@ -74,12 +76,30 @@ const navLinkClass =
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const { count } = useCart();
+  // 手機沒有小幫手浮動鈕了，入口改在這個抽屜的底部求助區
+  const { available: helperAvailable, openHelper } = useHelper();
 
+  // 走共用的計數式鎖，不要自己寫 body.style.overflow ——
+  // 小幫手的對話面板也會鎖，兩邊各寫各的會變成「誰後跑誰贏」。見 lib/scroll-lock.ts
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
+    if (!open) return;
+    return lockBodyScroll();
+  }, [open]);
+
+  /**
+   * 抽屜是 md:hidden。開著抽屜把視窗從手機寬拉到平板寬，抽屜會變成
+   * display:none 但 open 仍是 true —— 捲動鎖沒解，而畫面上看不到任何
+   * 能關掉它的東西（只剩 Esc）。斷點跨過去就自己關掉。
+   */
+  useEffect(() => {
+    if (!open) return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => {
+      if (mq.matches) setOpen(false);
     };
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, [open]);
 
   // Esc 關閉抽屜：手機也可能外接鍵盤，而且這是 dialog 的基本預期
@@ -174,6 +194,8 @@ export function SiteHeader() {
         <div className="flex items-center justify-between px-[16px] py-[12px] md:hidden">
           <button
             type="button"
+            /* 手機沒有小幫手浮動鈕，關掉對話面板後焦點要還給這一顆 */
+            id="site-menu-button"
             onClick={() => setOpen(true)}
             aria-label="開啟選單"
             aria-expanded={open}
@@ -302,19 +324,42 @@ export function SiteHeader() {
               </ul>
             </nav>
 
+            {/* 求助區。小幫手放這裡而不是上面的 <ul>：那個 <ul> 在
+                <nav aria-label="主選單"> 裡面，是一串「導覽目的地」，
+                塞一顆開對話框的按鈕語意不對。這一區本來就是「找不到要的東西？」，
+                AI 與真人是同一件事的兩條路，而且 shrink-0 永遠看得到、不用捲。 */}
             <div className="shrink-0 border-t border-sand-300 px-[20px] pt-[16px] pb-[calc(16px+env(safe-area-inset-bottom))]">
-              <p className="mb-[8px] text-[15px] text-brown-500">
-                找不到要的東西？直接用 LINE 問我們
+              <p className="mb-[10px] text-[15px] text-brown-500">
+                找不到要的東西？這兩個都可以問
               </p>
-              <a
-                href={SITE.lineHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-h-[56px] items-center justify-center rounded-pill bg-caramel-ink text-[18px] text-white"
-              >
-                用 LINE 問我們
-                <span className="sr-only">（會開啟 LINE）</span>
-              </a>
+              <div className="flex flex-col gap-[10px]">
+                {/* LINE 是實心主要鈕、小幫手是外框次要鈕：
+                    這個客群信任的是真人，AI 是「趕時間可以先試」。 */}
+                <a
+                  href={SITE.lineHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-h-[56px] items-center justify-center rounded-pill bg-caramel-ink text-[18px] text-white"
+                >
+                  用 LINE 問我們
+                  <span className="sr-only">（會開啟 LINE）</span>
+                </a>
+                {helperAvailable && (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      // 兩個 setState 會被 React 併成同一次 commit，
+                      // 抽屜（z-60）不會有任何一幀蓋在對話面板（z-50）上。
+                      setOpen(false);
+                      openHelper();
+                    }}
+                    className="flex min-h-[56px] items-center justify-center rounded-pill border-2 border-sand-400 text-[18px] text-brown-900 transition-colors duration-200 hover:border-caramel-ink hover:text-caramel-dk"
+                  >
+                    問小幫手（馬上回答）
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

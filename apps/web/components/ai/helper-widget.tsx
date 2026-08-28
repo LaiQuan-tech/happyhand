@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SITE } from "@/lib/site";
+import { useHelper } from "@/components/ai/helper-provider";
+import { lockBodyScroll } from "@/lib/scroll-lock";
 
 /**
  * 右下角 AI 小幫手。
  *
  * 設計上的三個前提：
  *   1. 客群 60–75 歲 → 字 17px 起跳、點擊區 44px 以上、不用圖示代替文字。
- *   2. 手機有 MobileActionBar（fixed bottom, z-40, 約 96px 高），
- *      浮動鈕要疊在它上面，不能互相遮住。
+ *   2. **手機沒有浮動鈕**：入口在 SiteHeader 的漢堡抽屜底部（那裡本來就是求助區）。
+ *      原本的浮動鈕會壓在 /account 的底部分頁列與課程卡上。
+ *      桌機保留浮動鈕 —— 那裡沒有東西跟它搶位置。
  *   3. 小幫手不是必要功能 → 後端掛掉時它自己會說「用 LINE 問我們」，
  *      不會出現壞掉的轉圈圈或紅色錯誤。
  */
 
 type Msg = { role: "user" | "model"; text: string };
-
-/** 這幾頁本身就有非做不可的動作，浮動鈕會擋路 */
-const HIDE_ON = ["/checkout", "/login", "/forgot-password", "/reset-password"];
 
 const GREETING =
   "你好，我是快樂手的小幫手。想知道哪一門課適合你、怎麼上課、怎麼付款，都可以問我。";
@@ -87,7 +87,9 @@ export function HelperWidget() {
   const pathname = usePathname();
   const sessionId = useSessionId();
 
-  const [open, setOpen] = useState(false);
+  // open 住在 provider，SiteHeader 的抽屜也要能打開它。其餘 state 留在這裡
+  // —— draft 若上移，使用者每敲一個字整個前台樹都要重算 context。
+  const { open, available, openHelper, closeHelper } = useHelper();
   const [msgs, setMsgs] = useState<Msg[]>([{ role: "model", text: GREETING }]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,11 +99,6 @@ export function HelperWidget() {
   const closeRef = useRef<HTMLButtonElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
 
-  const hidden = useMemo(
-    () => HIDE_ON.some((p) => pathname === p || pathname.startsWith(`${p}/`)),
-    [pathname],
-  );
-
   // 新訊息捲到底
   useEffect(() => {
     bodyRef.current?.scrollTo({
@@ -110,28 +107,65 @@ export function HelperWidget() {
     });
   }, [msgs, open]);
 
-  // 開啟時：手機鎖背景捲動、focus 到輸入框、Esc 關閉
+  // 開啟時：手機鎖背景捲動（桌機面板只佔右下角，不必鎖）、focus 到輸入框、Esc 關閉
   useEffect(() => {
     if (!open) return;
-    const mobile = window.matchMedia("(max-width: 767px)").matches;
-    const prev = document.body.style.overflow;
-    if (mobile) document.body.style.overflow = "hidden";
+    // 共用的計數式鎖，不要自己存 prev ——
+    // SiteHeader 的抽屜也在鎖，自存 prev 會把它的 "hidden" 記下來。見 lib/scroll-lock.ts
+    const unlock = window.matchMedia("(max-width: 767px)").matches
+      ? lockBodyScroll()
+      : null;
     inputRef.current?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeHelper();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlock?.();
       window.removeEventListener("keydown", onKey);
     };
+    // closeHelper 在 provider 裡用 useCallback 包過，identity 穩定，不會讓這段反覆重跑
+  }, [open, closeHelper]);
+
+  /**
+   * 關閉後把焦點還給當初叫出它的那顆按鈕，鍵盤使用者不會迷路。
+   *
+   * 🔴 wasOpen 這道不能省。open 初始就是 false，沒有它的話**每一次前台頁面
+   *    載入焦點都會被搶到浮動鈕上**，鍵盤使用者一按 Tab 就直接跳出頁面。
+   *    preventScroll 讓它看起來沒事，但 document.activeElement 是真的被改了。
+   *
+   * 🔴 判斷可見性不可以用 offsetParent —— 浮動鈕是 position:fixed，
+   *    它的 offsetParent 永遠是 null。用 matchMedia。
+   */
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      fabRef.current?.focus({ preventScroll: true });
+    } else {
+      // 手機沒有浮動鈕，焦點還給漢堡鈕
+      document.getElementById("site-menu-button")?.focus({ preventScroll: true });
+    }
   }, [open]);
 
-  // 關閉後把焦點還給浮動鈕，鍵盤使用者不會迷路
-  useEffect(() => {
-    if (!open) fabRef.current?.focus({ preventScroll: true });
-  }, [open]);
+  /**
+   * 這一頁在 768–1279px 有沒有固定底部列會跟浮動鈕打架。
+   *
+   * 目前只有 /account/*：AccountBottomNav 是 lg:hidden（1280 以下都在），
+   * 而 MobileActionBar / CourseBuyBar 都是 md:hidden（768 以上都不在），
+   * 剛好跟浮動鈕的 md:flex 錯開。
+   *
+   * 88px = 60px 列高 + 1px 上框線 + 27px 呼吸。
+   * 沒有這一段的話，900px 寬時浮動鈕會正好蓋掉「我的資料」那一格的右半 ——
+   * 是真的擋到可點區域，不只是視覺重疊。
+   */
+  const overBottomNav =
+    pathname === "/account" || pathname.startsWith("/account/");
 
   const send = useCallback(
     async (text: string) => {
@@ -180,17 +214,22 @@ export function HelperWidget() {
     [busy, msgs, sessionId],
   );
 
-  if (hidden) return null;
+  if (!available) return null;
 
   return (
     <>
-      {/* 浮動鈕。手機要讓開 MobileActionBar（96px 高），桌機貼右下 */}
+      {/* 浮動鈕。手機（<768）不出現，入口在漢堡抽屜裡。 */}
       {!open && (
         <button
           ref={fabRef}
           type="button"
-          onClick={() => setOpen(true)}
-          className="fixed right-[16px] bottom-[calc(104px+env(safe-area-inset-bottom))] z-40 flex min-h-[56px] items-center gap-[8px] rounded-full bg-caramel-ink px-[20px] text-[17px] font-medium text-white shadow-[0_6px_20px_rgba(74,53,36,0.28)] transition-colors duration-200 hover:bg-caramel-dk md:right-[28px] md:bottom-[28px]"
+          aria-haspopup="dialog"
+          onClick={openHelper}
+          className={`fixed right-[28px] z-40 hidden min-h-[56px] items-center gap-[8px] rounded-full bg-caramel-ink px-[20px] text-[17px] font-medium text-white shadow-[0_6px_20px_rgba(74,53,36,0.28)] transition-colors duration-200 hover:bg-caramel-dk md:flex ${
+            overBottomNav
+              ? "bottom-[calc(88px+env(safe-area-inset-bottom))] lg:bottom-[28px]"
+              : "bottom-[28px]"
+          }`}
         >
           <ChatIcon className="h-[22px] w-[22px] shrink-0" />
           有問題？問小幫手
@@ -202,7 +241,7 @@ export function HelperWidget() {
           {/* 手機是全螢幕面板，桌機不需要遮罩，但要有一層擋住誤點 */}
           <div
             className="fixed inset-0 z-40 bg-brown-900/25 md:hidden"
-            onClick={() => setOpen(false)}
+            onClick={() => closeHelper()}
             aria-hidden="true"
           />
 
@@ -223,7 +262,7 @@ export function HelperWidget() {
               <button
                 ref={closeRef}
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => closeHelper()}
                 aria-label="關閉小幫手"
                 className="-mr-[8px] flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-[20px] text-brown-500 transition-colors duration-200 hover:bg-cream-400 hover:text-brown-900"
               >
