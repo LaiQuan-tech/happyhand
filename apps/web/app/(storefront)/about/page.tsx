@@ -6,6 +6,7 @@ import { MobileActionBar } from "@/components/mobile-action-bar";
 import { PageHero } from "@/app/_components/page-hero";
 import { CallBand } from "@/app/_components/call-band";
 import { TeacherFeature } from "@/app/_components/teacher-feature";
+import { getSiteSetting, type TeacherSetting } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "品牌介紹",
@@ -47,7 +48,11 @@ const COMPANY_ROWS = [
   { label: "地址", value: SITE.address },
 ];
 
-export default function AboutPage() {
+export const revalidate = 300;
+
+export default async function AboutPage() {
+  const teacher = await getSiteSetting<TeacherSetting>("teacher");
+
   return (
     <div className="pb-action-bar">
       <PageHero
@@ -122,6 +127,7 @@ export default function AboutPage() {
         eyebrow={TEACHER.eyebrow}
         heading={TEACHER.name}
         paragraphs={TEACHER.paragraphs}
+        photoSrc={teacher?.photo_url}
         stats={[
           { value: "20 年", label: "教學經驗" },
           { value: "4,800+", label: "上過課的同學" },

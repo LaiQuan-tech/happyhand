@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { TEACHER } from "@/lib/content";
+import { getSiteSetting, type TeacherSetting } from "@/lib/data";
 import { LinkButton } from "@/components/ui/button";
 import { MobileActionBar } from "@/components/mobile-action-bar";
 import { PageHero } from "@/app/_components/page-hero";
@@ -19,7 +20,17 @@ const TEACHING_STYLE = [
   "來上課的多半是五、六十歲以上的長輩，也有人是為了照顧家裡的長輩才來學。有夫妻一起報名的，也有女兒帶著媽媽來的。大家程度都差不多，不用擔心跟不上。",
 ];
 
-export default function TeachersPage() {
+/**
+ * 講師照片放在 site_settings（後台 /admin/settings 可換），不是寫死在 content.ts。
+ * 這頁因此變成 async，但仍然是靜態 + ISR —— getSiteSetting 走 anon client、
+ * 不讀 cookie，不會把整頁變成每次連線都查一次資料庫。
+ * 後台換照片時 saveTeacher 會 revalidate 這條路徑，不用等 300 秒。
+ */
+export const revalidate = 300;
+
+export default async function TeachersPage() {
+  const teacher = await getSiteSetting<TeacherSetting>("teacher");
+
   return (
     <div className="pb-action-bar">
       <PageHero
@@ -38,6 +49,7 @@ export default function TeachersPage() {
           </>
         }
         paragraphs={[...TEACHER.paragraphs, ...TEACHING_STYLE]}
+        photoSrc={teacher?.photo_url}
         stats={[
           { value: "20 年", label: "教學經驗" },
           { value: "4,800+", label: "上過課的同學" },

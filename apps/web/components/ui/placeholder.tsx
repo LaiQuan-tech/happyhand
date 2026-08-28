@@ -12,6 +12,7 @@ export function Figure({
   rounded = "",
   sizes = "100vw",
   priority = false,
+  objectPosition = "object-center",
 }: {
   src?: string | null;
   alt: string;
@@ -20,6 +21,12 @@ export function Figure({
   rounded?: string;
   sizes?: string;
   priority?: boolean;
+  /**
+   * object-cover 的對齊點。人像放進比原圖更方的框時要用 `object-top`，
+   * 不然置中裁切會把頭切掉 —— 講師照就是這個情況：同一張 4:5 的照片
+   * 要同時吃首頁的 4:5 框與工作坊頁的 220px 方框。
+   */
+  objectPosition?: string;
 }) {
   if (src) {
     return (
@@ -30,7 +37,7 @@ export function Figure({
           fill
           sizes={sizes}
           priority={priority}
-          className="object-cover"
+          className={`object-cover ${objectPosition}`}
         />
       </div>
     );

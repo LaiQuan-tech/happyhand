@@ -22,6 +22,9 @@ function revalidateStorefront() {
   revalidatePath("/courses/[slug]", "page");
   revalidatePath("/workshops");
   revalidatePath("/workshops/[slug]", "page");
+  // 講師照片也出現在這兩頁。漏掉的話後台換了照片，這裡要等 300 秒才變。
+  revalidatePath("/teachers");
+  revalidatePath("/about");
 }
 
 /** 一行一項的 textarea → 陣列 */

@@ -346,6 +346,8 @@ export function TeacherSection({
             rounded="rounded-card"
             sizes="220px"
             className="h-[220px] w-full shrink-0 md:w-[220px]"
+            // 講師照是 4:5 直式，放進 220px 方框時置中裁切會切掉頭頂
+            objectPosition="object-top"
           />
         )}
         <div className="min-w-0 flex-1">
