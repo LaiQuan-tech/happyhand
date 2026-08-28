@@ -56,20 +56,24 @@ export function AccountShell({
       data-account-nav={state}
       className="account-scope mx-auto max-w-maxw px-[20px] py-[26px] md:px-[40px] md:py-[40px]"
     >
-      {/* 一顆按鈕、固定同一個位置、只換字。
+      {/* 一顆按鈕、固定同一個位置、只換字與方向。
           兩顆（收起在側欄底、叫回在內容上方）會讓收合時內容額外往下掉 60px；
           一顆放在 grid 上方，切換就只有寬度變化、沒有垂直位移。
-          同型前例：courses/_components/lesson-list.tsx 的「展開／收合」。 */}
+
+          🔴 樣式沿用全站的 outline 按鈕（components/ui/button.tsx 的 variants）：
+             第一版只有純文字沒有框，跟旁邊的選單項目同一個視覺重量，
+             使用者回報「看不出可以點」。要讓它讀起來是按鈕，框線不能省。
+             圖示是**陪著文字**不是取代文字，符合全站「不用圖示代替文字」的規則。 */}
       <div className="mb-[16px]">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={!collapsed}
           aria-controls="account-sidebar"
-          className="account-nav-toggle min-h-[44px] items-center rounded-input px-[12px] text-[17px] text-brown-700 transition-colors duration-200 hover:bg-cream-100 hover:text-caramel-dk"
+          className="account-nav-toggle min-h-[44px] items-center gap-[8px] rounded-pill border-2 border-sand-400 bg-white px-[18px] text-[17px] text-brown-900 transition-colors duration-200 hover:bg-[#F5E7CE] hover:border-caramel-ink"
         >
-          {/* 純文字不放圖示 —— 客群 60–75 歲，全站規則是不用圖示代替文字。 */}
-          {collapsed ? "顯示左邊的功能選單" : "收起左邊的功能選單"}
+          <PanelIcon collapsed={collapsed} className="h-[19px] w-[19px] shrink-0 text-caramel-ink" />
+          {collapsed ? "顯示選單" : "收起選單"}
         </button>
       </div>
 
@@ -85,5 +89,37 @@ export function AccountShell({
         <div className="min-w-0">{children}</div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 側欄開合的圖示：一個面板外框加上方向箭頭。
+ * 收合時箭頭朝右（把選單推回來）、展開時朝左（把選單收出去）。
+ *
+ * 這是常見的 sidebar toggle 圖示，但這裡只當**輔助**——按鈕上的文字
+ * 「收起選單／顯示選單」才是主要辨識依據，客群 60–75 歲看不懂純圖示。
+ */
+function PanelIcon({
+  collapsed,
+  className = "",
+}: {
+  collapsed: boolean;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M9.5 4v16" />
+      {collapsed ? <path d="M14 9.5l2.5 2.5L14 14.5" /> : <path d="M17 9.5L14.5 12l2.5 2.5" />}
+    </svg>
   );
 }
