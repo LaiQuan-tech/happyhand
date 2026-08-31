@@ -9,6 +9,7 @@ import {
 import {
   cancelOrder,
   markOrderPaid,
+  markRefundedManually,
   refundOrder,
   type OrderActionResult,
 } from "@/app/admin/orders/actions";
@@ -61,10 +62,14 @@ const ACTIONS: Record<OrderStatus, ActionSpec | null> = {
     action: cancelOrder,
   },
   refunded: {
-    label: "標記為已退款",
-    pendingLabel: "處理中…",
+    label: "退款",
+    pendingLabel: "退款中…",
     confirmText:
-      "確定要標記為已退款？\n\n請先確認退款真的匯出去了。訂單佔用的工作坊席次會釋出給其他人，而且這個狀態無法改回。",
+      "確定要退款？\n\n" +
+      "線上刷卡的訂單：系統會先向黑貓 PAY 送出退款（還沒請款的會是取消授權），" +
+      "成功了才把訂單改成「已退款」。錢沒退成功的話狀態不會變。\n" +
+      "ATM 或 LINE 代訂的訂單：系統沒有金流可以呼叫，請自己先把錢匯回去。\n\n" +
+      "訂單佔用的工作坊席次會釋出給其他人，而且這個狀態無法改回。",
     variant: "danger",
     action: refundOrder,
   },
@@ -128,6 +133,46 @@ export function OrderStatusButtons({
           );
         })}
       </div>
+      {/*
+        逃生門。只在「已付款」時出現。
+
+        為什麼一定要有：跨月不能退（要改開折讓）、部分退款、金流 API 掛掉、
+        或客服當下就直接用黑貓 PAY 後台退了 —— 這些情況上面那顆會一直失敗，
+        沒有這一顆的話訂單就永遠卡在「已付款」，工作坊席次也放不出來。
+
+        刻意做成 <details> 收起來、而且不是 danger 樣式：它比較不危險
+        （不會動到錢），但**很容易被誤用**成「退款按鈕壞了就按這個」。
+        收起來讓人多想一秒。
+      */}
+      {status === "paid" && (
+        <details className="rounded-card border border-line bg-panel px-3.5 py-2.5">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center text-[13px] text-ink-soft admin:min-h-10 [&::-webkit-details-marker]:hidden">
+            ＋ 已經在黑貓 PAY 後台退過款了？
+          </summary>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+            這一顆<span className="font-medium text-ink">不會碰錢</span>，只把訂單標成已退款、
+            釋出工作坊席次。只有在錢
+            <span className="font-medium text-ink">確實</span>
+            已經退出去的情況下才按 —— 系統這邊會在稽核紀錄裡註明「人工退款」，
+            之後對帳分得出來。
+          </p>
+          <div className="mt-2">
+            <ConfirmButton
+              action={markRefundedManually.bind(null, orderId)}
+              confirmText={
+                "確定錢已經退給客人了嗎？\n\n" +
+                "這一顆不會向黑貓 PAY 送出任何指令，只改訂單狀態。\n" +
+                "如果錢其實還沒退，這筆訂單就會變成「系統說退了、實際沒退」，" +
+                "而且無法改回。"
+              }
+              pendingLabel="標記中…"
+            >
+              只標記為已退款（不呼叫金流）
+            </ConfirmButton>
+          </div>
+        </details>
+      )}
+
       <p className="text-[13px] leading-relaxed text-ink-soft">
         目前狀態：{orderStatusLabel(status)}。
         {status === "pending"

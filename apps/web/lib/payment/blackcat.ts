@@ -33,6 +33,15 @@ const HASH_BASE = process.env.BLACKCAT_HASH_BASE ?? "";
 /** 收單行。合約開通的是統一金流 PAYUNi（特店代號 CCAT…）。 */
 const ACQUIRER_TYPE = process.env.BLACKCAT_ACQUIRER_TYPE ?? "payuni";
 
+/**
+ * 「取消交易 & 退刷密碼」。跟 API 密碼是**不同**的一組，在合約設定表上。
+ *
+ * ⚠️ 規格正文的欄位表裡沒有這一欄（全文搜「退刷」零命中），只有 P70 的退款
+ *    範例出現過 `cust_password`。所以這個欄位名是從範例推的，不是從欄位表。
+ *    第一次真的退款時要看回應確認；打錯的話會回 status != OK 而不是靜默失敗。
+ */
+const REFUND_PASSWORD = process.env.BLACKCAT_REFUND_PASSWORD ?? "";
+
 const REQUEST_TIMEOUT_MS = 20_000;
 
 /** 規格 P40：金額上限以合約規範為主，預設 100,000。 */
@@ -40,6 +49,11 @@ const MAX_ORDER_AMOUNT = 100_000;
 
 export function isBlackcatConfigured(): boolean {
   return Boolean(CUST_ID && API_PASSWORD);
+}
+
+/** 退款／取消授權要另一組密碼，沒設就整個功能關掉。 */
+export function canReverseCharge(): boolean {
+  return isBlackcatConfigured() && Boolean(REFUND_PASSWORD);
 }
 
 /** hash_base 只有驗證瀏覽器導回時才需要，缺了不影響建單與 APN。 */
@@ -287,6 +301,169 @@ export async function queryOrder(orderNo: string): Promise<QueryOrderResult> {
   } catch (error) {
     return { ok: false, reason: (error as Error).message };
   }
+}
+
+// ---------------------------------------------------------------------------
+// 退款 / 取消授權
+// ---------------------------------------------------------------------------
+
+/**
+ * 🔴 這兩件事在信用卡的世界裡是**不同**的操作，打錯會失敗：
+ *
+ *   取消授權（CocsOrderCancel）—— 銀行授權過但**還沒請款**。錢從來沒真的離開
+ *     客人的帳戶，只是額度被凍住；取消之後凍結解除，對帳單上不會留下扣款。
+ *   退款（CocsOrderRefund）—— **已經請款完成**，錢真的收了。退款是把錢送回去，
+ *     客人的對帳單上會有一筆扣款和一筆退款。
+ *
+ * 用 process_code 判斷該用哪一個（規格附件 1）：
+ *   15 授權完成      → 取消授權
+ *   20 請求請款      ┐ 請款在途中，兩種都不能做。統一金流是每日 20:00 截止、
+ *   21 請款作業中    ┘ 隔日中午請款完成，所以這段時間要等。
+ *   22 請款完成      → 退款
+ *
+ * ⚠️ 猜錯的後果不是靜默失敗（會回 status != OK），但客服會看到一個看不懂的
+ *    錯誤訊息然後以為系統壞了。所以一律先查再決定，不要讓呼叫端自己選。
+ */
+
+const PROCESS_CODE_LABEL: Record<number, string> = {
+  15: "授權完成（尚未請款）",
+  20: "請求請款中",
+  21: "請款作業中",
+  22: "請款完成",
+};
+
+export type ReverseChargeResult =
+  | { ok: true; action: "cancelled" | "refunded"; note: string }
+  | { ok: false; reason: string; canRetryLater: boolean };
+
+async function collect(
+  payload: Record<string, unknown>,
+): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false; reason: string }> {
+  let token: string;
+  try {
+    token = await getToken();
+  } catch (error) {
+    return { ok: false, reason: (error as Error).message };
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/Collect`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let json: Record<string, unknown>;
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return { ok: false, reason: `回應不是 JSON（HTTP ${res.status}）：${text.slice(0, 120)}` };
+    }
+    if (json.status !== "OK") {
+      return { ok: false, reason: String(json.msg ?? `HTTP ${res.status}`) };
+    }
+    return { ok: true, json };
+  } catch (error) {
+    return { ok: false, reason: `連線失敗：${(error as Error).message}` };
+  }
+}
+
+/**
+ * 把一筆已授權／已請款的交易退回去。
+ *
+ * 呼叫端只要說「這張訂單要退」，該用取消授權還是退款由這裡查了再決定。
+ *
+ * @param orderNo 我們的訂單編號（= cust_order_no）
+ * @param amount  要退的金額。目前一律全額退 —— 部分退款要另外處理，因為
+ *                部分退款之後訂單狀態不該是「已退款」，而現在的狀態機沒有
+ *                「部分退款」這個狀態（admin/orders/shared.ts 只有四種）。
+ */
+export async function reverseCharge(
+  orderNo: string,
+  amount: number,
+): Promise<ReverseChargeResult> {
+  if (!isBlackcatConfigured()) {
+    return { ok: false, reason: "金流未設定。", canRetryLater: false };
+  }
+  if (!REFUND_PASSWORD) {
+    return {
+      ok: false,
+      reason:
+        "沒有設定退刷密碼（BLACKCAT_REFUND_PASSWORD），無法自動退款。" +
+        "請到黑貓 PAY 後台手動退，再回來標記訂單。",
+      canRetryLater: false,
+    };
+  }
+
+  // ── 1. 先查現在到哪一步 ────────────────────────────────────────────
+  const q = await queryOrder(orderNo);
+  if (!q.ok) {
+    // 查不到就**不要動**。這時候發指令等於閉著眼睛操作真的錢。
+    return { ok: false, reason: `查不到這筆交易的狀態（${q.reason}）`, canRetryLater: true };
+  }
+
+  const raw = (q.data.data ?? q.data) as Record<string, unknown>;
+  const processCode = Number(raw.process_code);
+
+  if (!Number.isFinite(processCode)) {
+    return { ok: false, reason: "查詢回應裡沒有 process_code。", canRetryLater: true };
+  }
+
+  // ── 2. 依狀態選指令 ────────────────────────────────────────────────
+  if (processCode === 20 || processCode === 21) {
+    return {
+      ok: false,
+      reason:
+        `這筆交易正在請款途中（${PROCESS_CODE_LABEL[processCode]}），現在沒辦法取消也沒辦法退款。` +
+        "統一金流每天 20:00 截止、隔日中午請款完成，明天中午之後再退一次。",
+      canRetryLater: true,
+    };
+  }
+
+  if (processCode !== 15 && processCode !== 22) {
+    return {
+      ok: false,
+      reason:
+        `這筆交易的狀態是 ${processCode}，不是可以退的狀態` +
+        "（可能已經退過、授權失敗或已逾期）。請到黑貓 PAY 後台確認。",
+      canRetryLater: false,
+    };
+  }
+
+  const isCancel = processCode === 15;
+
+  const res = await collect({
+    cmd: isCancel ? "CocsOrderCancel" : "CocsOrderRefund",
+    cust_id: CUST_ID,
+    cust_order_no: orderNo,
+    // ⚠️ 欄位名從規格 P70 的範例推的，不在欄位表裡（見 REFUND_PASSWORD 的註解）
+    cust_password: REFUND_PASSWORD,
+    // 取消授權是整筆取消，不帶金額；退款要指定金額
+    ...(isCancel ? {} : { refund_amount: Math.round(amount) }),
+    send_time: taipeiTimestamp(),
+  });
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: `${isCancel ? "取消授權" : "退款"}失敗：${res.reason}`,
+      // 連線類的可以再試，業務類的再試也一樣
+      canRetryLater: res.reason.startsWith("連線失敗"),
+    };
+  }
+
+  return {
+    ok: true,
+    action: isCancel ? "cancelled" : "refunded",
+    note: isCancel
+      ? "這筆還沒請款，已經取消授權 —— 客人的對帳單上不會出現這筆扣款。"
+      : `已送出退款 ${Math.round(amount)} 元。實際入帳時間依發卡行，通常 3～7 個工作天。`,
+  };
 }
 
 // ---------------------------------------------------------------------------

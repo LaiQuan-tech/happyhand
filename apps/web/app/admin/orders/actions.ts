@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin/entitlements";
 import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
 import { ensureInvoiceRow, issueForOrder, voidForOrder } from "@/lib/invoice/issue";
+import { canReverseCharge, reverseCharge } from "@/lib/payment/blackcat";
 import { orderPaidEmail } from "@/lib/email/templates";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
@@ -40,7 +41,7 @@ import {
  *    只有拿到那一列的那一次才會去動名額。
  */
 
-export type OrderActionResult = { error?: string | null };
+export type OrderActionResult = { error?: string | null; ok?: string | null };
 
 /** audit 的動詞。四個狀態都列出來，之後加轉移不會漏。 */
 const AUDIT_ACTION: Record<OrderStatus, string> = {
@@ -70,8 +71,108 @@ export async function cancelOrder(orderId: string): Promise<OrderActionResult> {
   return transitionOrder(orderId, "cancelled");
 }
 
+/**
+ * 退款：**先把錢退回去，成功了才改狀態**。
+ *
+ * 🔴 順序不能反。先改狀態的話，一旦金流那邊失敗，資料庫會說「已退款」但錢
+ *    還在我們這裡 —— 而那是客服最不會回頭去查的狀態（畫面顯示成功了）。
+ *    反過來（先退錢、後改狀態失敗）至少錢是往客人的方向走，客服重按一次就好。
+ *
+ * 只有「透過黑貓 PAY 收的款」才會真的去呼叫金流。ATM 匯款與 LINE 代訂本來就
+ * 是人工收的，也只能人工退。
+ */
 export async function refundOrder(orderId: string): Promise<OrderActionResult> {
+  let staff;
+  try {
+    staff = await requireCapability("orders:write");
+  } catch (err) {
+    return { error: adminErrorMessage(err) };
+  }
+
+  const db = createServiceClient();
+  const { data: order } = await db
+    .from("orders")
+    .select("order_no, status, total, payment_provider, payment_trade_no, payment_paid_amount")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!order) return { error: "找不到這筆訂單。" };
+  if (order.status !== "paid") {
+    return { error: `這筆訂單目前是「${ORDER_STATUS_LABELS[order.status as OrderStatus] ?? order.status}」，不能退款。` };
+  }
+
+  const viaGateway = order.payment_provider === "blackcat" && Boolean(order.payment_trade_no);
+
+  if (viaGateway) {
+    if (!canReverseCharge()) {
+      return {
+        error:
+          "這筆是線上刷卡，但系統沒有設定退刷密碼（BLACKCAT_REFUND_PASSWORD），沒辦法自動退款。" +
+          "請到黑貓 PAY 後台手動退款，再用下面的「已在後台退過款」按鈕標記。",
+      };
+    }
+
+    const amount = (order.payment_paid_amount as number | null) ?? (order.total as number);
+    const res = await reverseCharge(order.order_no as string, amount);
+
+    if (!res.ok) {
+      // 🔴 狀態刻意不動。錢沒退成功就不該顯示成已退款。
+      await writeAudit(staff, {
+        action: "order.refund_failed",
+        entity: "order",
+        entityId: orderId,
+        summary: `訂單 ${order.order_no} 退款失敗（狀態未變更）：${res.reason}`,
+      });
+      return {
+        error:
+          res.reason +
+          (res.canRetryLater ? "" : " 若已經在黑貓 PAY 後台手動退過，請改用「已在後台退過款」。"),
+      };
+    }
+
+    // 錢退掉了，接著改狀態。這一段失敗的話錢已經在路上，客服重按一次就好。
+    const out = await transitionOrder(orderId, "refunded");
+    await writeAudit(staff, {
+      action: res.action === "cancelled" ? "order.auth_cancelled" : "order.refunded_gateway",
+      entity: "order",
+      entityId: orderId,
+      summary: `訂單 ${order.order_no}（${money(amount)}）${res.note}`,
+    });
+    return out.error ? out : { error: null, ok: res.note };
+  }
+
+  // 人工收款的訂單：本來就沒有金流可以呼叫。
   return transitionOrder(orderId, "refunded");
+}
+
+/**
+ * 逃生門：已經在黑貓 PAY 後台手動退過款，只要把訂單標起來。
+ *
+ * 為什麼一定要有這一顆：跨月不能退（要改開折讓）、部分退款、金流 API 掛掉、
+ * 或客服當下就用後台退了 —— 這些情況下上面那顆會一直失敗，沒有這顆的話
+ * 訂單就永遠卡在「已付款」，工作坊席次也放不出來。
+ *
+ * ⚠️ 它的 audit 摘要刻意寫明「系統沒有呼叫金流」，事後對帳才分得出來
+ *    哪些是系統退的、哪些是人手動退的。
+ */
+export async function markRefundedManually(orderId: string): Promise<OrderActionResult> {
+  let staff;
+  try {
+    staff = await requireCapability("orders:write");
+  } catch (err) {
+    return { error: adminErrorMessage(err) };
+  }
+
+  const out = await transitionOrder(orderId, "refunded");
+  if (!out.error) {
+    await writeAudit(staff, {
+      action: "order.refunded_manual",
+      entity: "order",
+      entityId: orderId,
+      summary: "標記為已退款（人工）—— 系統沒有呼叫金流，錢是在黑貓 PAY 後台或其他管道退的。",
+    });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ 實作 */

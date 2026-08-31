@@ -14,7 +14,10 @@ import { useState, useTransition } from "react";
  */
 
 /** server action 可以回 { error } 讓按鈕顯示訊息，也可以直接 throw，兩種都接。 */
-export type ConfirmActionResult = { error?: string | null } | void | undefined;
+export type ConfirmActionResult =
+  | { error?: string | null; ok?: string | null }
+  | void
+  | undefined;
 
 type Variant = "default" | "danger";
 
@@ -60,9 +63,13 @@ export function ConfirmButton({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // 有些動作成功之後還有話要說（例如退款到底是「取消授權」還是「真的退錢」，
+  // 對客人的對帳單影響完全不同）。狀態變更本身看得到，但那句話看不到。
+  const [okMessage, setOkMessage] = useState<string | null>(null);
 
   function handleClick() {
     setError(null);
+    setOkMessage(null);
     // confirm() 是同步阻塞的，必須在 startTransition 外面呼叫，
     // 不然 transition 已經開始了才被取消。
     if (!window.confirm(confirmText)) return;
@@ -71,6 +78,7 @@ export function ConfirmButton({
       try {
         const result = await action();
         if (result && result.error) setError(result.error);
+        else if (result && result.ok) setOkMessage(result.ok);
       } catch (err) {
         if (isNextControlFlow(err)) throw err;
         setError(
@@ -96,6 +104,11 @@ export function ConfirmButton({
       {error && (
         <span role="alert" className="max-w-[22rem] text-[13px] leading-snug text-danger">
           {error}
+        </span>
+      )}
+      {okMessage && (
+        <span role="status" className="max-w-[22rem] text-[13px] leading-snug text-ok">
+          {okMessage}
         </span>
       )}
     </span>
