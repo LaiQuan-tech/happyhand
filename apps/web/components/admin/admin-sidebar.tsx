@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { can, type Role } from "@/lib/admin/roles";
-import { ADMIN_NAV, AdminNavIcon, isAdminNavActive } from "./admin-nav-items";
+import type { Role } from "@/lib/admin/roles";
+import { ADMIN_NAV, AdminNavIcon, canSeeNavItem,
+  isAdminNavActive } from "./admin-nav-items";
 
 /**
  * 桌機（>= admin 斷點 1024px）固定左側欄。
@@ -17,7 +18,7 @@ import { ADMIN_NAV, AdminNavIcon, isAdminNavActive } from "./admin-nav-items";
  */
 export function AdminSidebar({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = ADMIN_NAV.filter((item) => can(role, item.capability));
+  const items = ADMIN_NAV.filter((item) => canSeeNavItem(role, item));
 
   return (
     <aside className="hidden w-[220px] shrink-0 self-start border-r border-line bg-panel admin:sticky admin:top-0 admin:flex admin:max-h-svh admin:flex-col">

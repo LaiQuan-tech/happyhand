@@ -14,6 +14,7 @@ import {
   SLUG_PATTERN,
   arrayToLines,
   type ProductRow,
+  type ProductType,
 } from "@/app/admin/products/shared";
 import {
   SectionHeader,
@@ -57,6 +58,13 @@ type SectionProps = {
   product: ProductRow | null;
   /** 前台由上到下的第幾段，由頁面連號產生。新增課程時不編號。 */
   step?: string;
+  /**
+   * 新增時的類型預選。
+   * 工作坊清單頁的「新增工作坊」會帶 ?type=workshop 進來，
+   * 不然每次從那一頁新增都要手動把「線上課程」改成「實體工作坊」。
+   * 編輯既有商品時忽略（用商品自己的 type）。
+   */
+  defaultType?: ProductType;
 };
 
 /**
@@ -305,7 +313,7 @@ export function ProductNotesSection({ product, step }: SectionProps) {
  * 瀏覽器沒辦法把焦點移到看不見的欄位，會直接靜默拒絕送出 ——
  * 使用者按了儲存但什麼都沒發生，也沒有任何錯誤訊息。
  */
-export function ProductSettingsSection({ product, step }: SectionProps) {
+export function ProductSettingsSection({ product, step, defaultType }: SectionProps) {
   return (
     <section className="flex flex-col gap-4 border-t border-line pt-6">
       <SectionHeader
@@ -320,7 +328,7 @@ export function ProductSettingsSection({ product, step }: SectionProps) {
           name="type"
           label="類型"
           required
-          defaultValue={product?.type ?? "course"}
+          defaultValue={product?.type ?? defaultType ?? "course"}
           options={PRODUCT_TYPES.map((value) => ({
             value,
             label: PRODUCT_TYPE_LABEL[value],
@@ -450,13 +458,23 @@ export function ProductSettingsSection({ product, step }: SectionProps) {
  *    新增與排序只活在 client state，一次 redirect 就歸零）。
  *    標籤與說明因此刻意寫成「課程資料」而不是「這一頁」。
  */
-export function ProductSaveBar({ isNew }: { isNew: boolean }) {
+export function ProductSaveBar({
+  isNew,
+  backTo = "course",
+}: {
+  isNew: boolean;
+  /** 「取消」要回哪一張清單。跟頁首麵包屑同一個判斷。 */
+  backTo?: "course" | "workshop";
+}) {
   return (
     <div className="sticky bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-paper px-4 py-3 admin:bottom-0 admin:-mx-6 admin:px-6">
       <button type="submit" form={PRODUCT_FORM_ID} className={adminPrimaryButton}>
         {isNew ? "建立課程" : "儲存課程資料"}
       </button>
-      <Link href="/admin/products" className={adminSecondaryButton}>
+      <Link
+        href={backTo === "workshop" ? "/admin/workshops" : "/admin/courses"}
+        className={adminSecondaryButton}
+      >
         取消
       </Link>
       <p className="text-[13px] text-ink-soft">

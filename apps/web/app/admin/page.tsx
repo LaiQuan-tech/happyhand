@@ -164,7 +164,7 @@ export default async function AdminDashboardPage() {
       )}
 
       {catalogStats && (
-        <Section title="課程與工作坊" href="/admin/products" linkLabel="管理課程">
+        <Section title="課程與工作坊" href="/admin/courses" linkLabel="管理課程">
           {catalogStats.error ? (
             <LoadError message={catalogStats.error} />
           ) : (

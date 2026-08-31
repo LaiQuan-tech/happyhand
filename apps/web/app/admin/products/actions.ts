@@ -65,11 +65,22 @@ function revalidateStorefront() {
 }
 
 function revalidateAdmin(productId?: string) {
-  revalidatePath("/admin/products");
+  // 清單已經拆成兩頁，兩邊都要打掉 —— 一門線上課另開實體班的話它兩邊都在。
+  revalidatePath("/admin/courses");
+  revalidatePath("/admin/workshops");
   if (productId) revalidatePath(`/admin/products/${productId}`);
-  // 場次頁與後台首頁都會列出課程名稱與場次，一起打掉才不會前後不一致。
-  revalidatePath("/admin/sessions");
   revalidatePath("/admin");
+}
+
+/**
+ * 這個類型的商品屬於哪一張清單。
+ *
+ * ⚠️ 這裡只看 type，跟清單頁「type 是工作坊**或**有場次」的收錄條件不同 ——
+ *    那是刻意的：存檔後要回「一個」地方，而線上課另開實體班的那一門兩邊都在，
+ *    回它的主身分（線上課程）才符合直覺。
+ */
+function listPathFor(type: string): string {
+  return type === "workshop" ? "/admin/workshops" : "/admin/courses";
 }
 
 /* ------------------------------------------------------------ 新增／編輯 */
@@ -88,7 +99,8 @@ function revalidateAdmin(productId?: string) {
  * 真正會走到這裡的只剩「代稱重複」這種 server 才知道的情況。
  */
 export async function upsertProduct(formData: FormData): Promise<void> {
-  let destination = "/admin/products";
+  // 還沒讀到 type 之前的預設。真的走到成功路徑時會被下面依 type 覆寫。
+  let destination = "/admin/courses";
 
   try {
     const staff = await requireCapability("catalog:write");
@@ -216,7 +228,9 @@ export async function upsertProduct(formData: FormData): Promise<void> {
 
       revalidateAdmin(newId);
       revalidateStorefront();
-      destination = newId ? `/admin/products/${newId}?msg=created` : "/admin/products";
+      destination = newId
+        ? `/admin/products/${newId}?msg=created`
+        : listPathFor(type);
       return;
     }
 
@@ -234,7 +248,7 @@ export async function upsertProduct(formData: FormData): Promise<void> {
       return;
     }
     if (!before) {
-      destination = "/admin/products?msg=notfound";
+      destination = `${listPathFor(typeRaw)}?msg=notfound`;
       return;
     }
 
@@ -368,6 +382,10 @@ export async function togglePublish(
  *    所以這裡連場次的參照也一起查。
  */
 export async function deleteProduct(productId: string): Promise<ActionResult> {
+  // redirect 必須在 try/catch 外面（它靠丟例外實作），所以要先把「刪完回哪一頁」
+  // 存出來 —— 那時候拿不到 row 了。
+  let deletedListPath = "/admin/courses";
+
   try {
     const staff = await requireCapability("catalog:write");
     const db = createServiceClient();
@@ -379,7 +397,12 @@ export async function deleteProduct(productId: string): Promise<ActionResult> {
       .maybeSingle();
     if (beforeError) return { error: "讀取課程失敗，請重試一次。" };
     if (!before) return { error: "找不到這門課，可能已經被其他同事刪除了。" };
-    const row = before as unknown as { title: string; is_published: boolean; slug: string };
+    const row = before as unknown as {
+      title: string;
+      is_published: boolean;
+      slug: string;
+      type: string;
+    };
 
     // 參照檢查抽在 ./guards.ts，驗收腳本跑的是同一支。
     // cast 的理由見 guards.ts 的 CountFilter 註解（supabase 的建構器泛型
@@ -415,13 +438,15 @@ export async function deleteProduct(productId: string): Promise<ActionResult> {
 
     revalidateAdmin(productId);
     revalidateStorefront();
+    deletedListPath = listPathFor(row.type);
   } catch (err) {
     console.error("[admin/products] deleteProduct 例外", err);
     return { error: adminErrorMessage(err) };
   }
 
   // 成功才會走到這裡。redirect 要在 try/catch 外面，否則會被自己的 catch 吃掉。
-  redirect("/admin/products?msg=saved");
+  // 刪掉的是工作坊就回工作坊清單，否則回課程清單。
+  redirect(`${deletedListPath}?msg=saved`);
 }
 
 /* ------------------------------------------------------------ 單元整批存 */

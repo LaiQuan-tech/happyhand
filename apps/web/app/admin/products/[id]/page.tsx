@@ -19,7 +19,9 @@ import { BlockEditor } from "@/components/admin/block-editor";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { deleteProduct, togglePublish } from "../actions";
 import {
+  PRODUCT_TYPES,
   firstValue,
+  pickOne,
   toProductType,
   toSessionStatus,
   type LessonRow,
@@ -133,15 +135,26 @@ export default async function AdminProductEditPage({
          的唯一例外，而且只在這裡成立：新增走的是 insert，沒送出的欄位是
          「還沒有值」不是「被清空」。編輯既有課程時少一個欄位就是資料流失。
     */
+    /*
+      從工作坊清單頁按「新增工作坊」會帶 ?type=workshop 進來。
+      pickOne 只做白名單過濾（回 string），再過一次 toProductType 拿到正確的
+      union 型別 —— 認不得的一律回 "course"，跟表單本來的預設一致。
+    */
+    const typeParam = pickOne((await searchParams).type, PRODUCT_TYPES);
+    const defaultType = typeParam ? toProductType(typeParam) : undefined;
+
     return (
       <div className="flex flex-col gap-6">
-        <Header title="新增課程" />
+        <Header
+          title={defaultType === "workshop" ? "新增工作坊" : "新增課程"}
+          backTo={defaultType === "workshop" ? "workshop" : "course"}
+        />
         {notice && <FormNotice code={notice} />}
         <ProductFormAnchor product={null} />
-        <ProductSettingsSection product={null} />
+        <ProductSettingsSection product={null} defaultType={defaultType} />
         <ProductCoverSection product={null} />
         <ProductIntroSection product={null} />
-        <ProductSaveBar isNew />
+        <ProductSaveBar isNew backTo={defaultType === "workshop" ? "workshop" : "course"} />
       </div>
     );
   }
@@ -334,6 +347,8 @@ export default async function AdminProductEditPage({
     <div className="flex flex-col gap-6">
       <Header
         title={product.title}
+        // 線上課另開實體班的那一門也回工作坊 —— 會來這裡改它的人多半是為了場次
+        backTo={showSessions ? "workshop" : "course"}
         meta={
           <>
             <TypeChip type={product.type} />
@@ -461,7 +476,7 @@ export default async function AdminProductEditPage({
 
       <ProductSettingsSection product={product} step={nextStep()} />
 
-      <ProductSaveBar isNew={false} />
+      <ProductSaveBar isNew={false} backTo={showSessions ? "workshop" : "course"} />
     </div>
   );
 }
@@ -495,18 +510,32 @@ function Header({
   title,
   meta,
   actions,
+  backTo = "course",
 }: {
   title: string;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
+  /**
+   * 麵包屑要回哪一張清單。
+   *
+   * 清單已經拆成「線上課程」與「工作坊」兩頁，而編輯頁還是同一支（/admin/products/[id]）——
+   * 那代表編輯的時候側欄不會有任何項目亮起來。麵包屑至少要把人送回他剛才來的那一頁，
+   * 不然改完一門工作坊會被丟到課程清單上。
+   */
+  backTo?: "course" | "workshop";
 }) {
+  const back =
+    backTo === "workshop"
+      ? { href: "/admin/workshops", label: "← 回工作坊" }
+      : { href: "/admin/courses", label: "← 回線上課程" };
+
   return (
     <div className="flex flex-col gap-3">
       <Link
-        href="/admin/products"
+        href={back.href}
         className="text-[14px] text-accent-ink underline underline-offset-4"
       >
-        ← 回課程列表
+        {back.label}
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

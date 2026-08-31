@@ -1,4 +1,4 @@
-import type { Capability } from "@/lib/admin/roles";
+import { can, type Capability, type Role } from "@/lib/admin/roles";
 
 /**
  * 後台導覽的單一真相來源。
@@ -16,8 +16,14 @@ import type { Capability } from "@/lib/admin/roles";
 export type AdminNavItem = {
   href: string;
   label: string;
-  /** 進入這個頁面所需的能力（lib/admin/roles.ts） */
-  capability: Capability;
+  /**
+   * 進入這個頁面所需的能力（lib/admin/roles.ts）。
+   *
+   * ⚠️ 陣列的語意是 **任一即可（any-of）**，不是「全部都要」。
+   *    型別上看不出來，所以寫在這裡：工作坊那一頁 catalog:read 或 orders:read
+   *    任一就進得去（內容編輯來改場次、客服來看報名），區段各自再判一次。
+   */
+  capability: Capability | Capability[];
   /** SVG path 的 d 屬性，24x24 viewBox、stroke 樣式 */
   icon: string;
   /** true = 出現在手機底部分頁列 */
@@ -40,13 +46,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     primary: true,
   },
   {
-    href: "/admin/sessions",
-    label: "場次報名",
-    capability: "orders:read",
-    icon: "M4 5h16v16H4V5Zm0 5h16M9 3v4M15 3v4M8 14h3v3H8v-3Z",
-    primary: true,
-  },
-  {
     // 諮詢紀錄裡有訪客留的姓名／Email／電話，跟訂單同等敏感，
     // 所以走 orders:read —— editor 看不到，這是刻意的。
     href: "/admin/inquiries",
@@ -55,10 +54,27 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5Z",
   },
   {
-    href: "/admin/products",
-    label: "課程與工作坊",
+    // 線上課程與訂閱制：買了就能看的東西，內容是單元與影片。
+    href: "/admin/courses",
+    label: "線上課程",
     capability: "catalog:read",
     icon: "M4 4h5a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4Zm16 0h-5a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h5V4Z",
+    primary: true,
+  },
+  {
+    /*
+      實體工作坊：內容是場次與報名。
+
+      🔴 這一項是全站唯一用「任一即可」的：
+         內容編輯要來改場次的日期地點（catalog），客服要來看誰報名了（orders），
+         兩種人的工作都在這一頁上，但看到的東西不一樣 ——
+         頁面本身只顯示場次層資料（日期、地點、名額），
+         報名名單在 /admin/sessions/[id]，那一頁仍然只認 orders:read。
+    */
+    href: "/admin/workshops",
+    label: "工作坊",
+    capability: ["catalog:read", "orders:read"],
+    icon: "M4 5h16v16H4V5Zm0 5h16M9 3v4M15 3v4M8 14h3v3H8v-3Z",
     primary: true,
   },
   {
@@ -80,6 +96,18 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: "M5 3h9l5 5v13H5V3Zm9 0v5h5M8 12h8M8 16h5",
   },
 ];
+
+/**
+ * 這個角色看不看得到這一項。
+ *
+ * capability 是陣列時代表**任一即可**（見 AdminNavItem 的註解）。
+ * 這只決定「導覽列上出不出現」—— 保護一律在頁面自己的守衛上。
+ */
+export function canSeeNavItem(role: Role | null, item: AdminNavItem): boolean {
+  return Array.isArray(item.capability)
+    ? item.capability.some((c) => can(role, c))
+    : can(role, item.capability);
+}
 
 /**
  * 目前路徑是否命中該項目。

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { can, type Role } from "@/lib/admin/roles";
-import { ADMIN_NAV, AdminNavIcon, isAdminNavActive } from "./admin-nav-items";
+import type { Role } from "@/lib/admin/roles";
+import { ADMIN_NAV, AdminNavIcon, canSeeNavItem,
+  isAdminNavActive } from "./admin-nav-items";
 
 const MORE_ICON = "M5 12h.01M12 12h.01M19 12h.01";
 
@@ -23,7 +24,7 @@ export function AdminBottomNav({ role }: { role: Role }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const permitted = ADMIN_NAV.filter((item) => can(role, item.capability));
+  const permitted = ADMIN_NAV.filter((item) => canSeeNavItem(role, item));
   const primary = permitted.filter((item) => item.primary);
   const secondary = permitted.filter((item) => !item.primary);
   const moreActive = secondary.some((item) => isAdminNavActive(pathname, item.href));
