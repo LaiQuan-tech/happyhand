@@ -13,6 +13,8 @@ import { suggestEmail } from "@/lib/email-typo";
 import { SITE, formatPrice } from "@/lib/site";
 import { CheckoutSteps } from "./checkout-steps";
 import { PaymentOptions, type PaymentMethod } from "./payment-options";
+import { InvoiceOptions, EMPTY_INVOICE, type InvoiceValue } from "./invoice-options";
+import { validateInvoice } from "@/lib/invoice/validate";
 
 type FieldKey = "name" | "phone" | "email" | "address";
 type Errors = Partial<Record<FieldKey, string>>;
@@ -33,6 +35,7 @@ export function CheckoutView() {
   const [address, setAddress] = useState("");
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("credit");
+  const [invoice, setInvoice] = useState<InvoiceValue>(EMPTY_INVOICE);
 
   /**
    * 報名問題。只有購物車裡有工作坊時才問 —— 線上課買了就能看，
@@ -191,6 +194,24 @@ export function CheckoutView() {
       return;
     }
 
+    /*
+      發票欄位。放在這裡而不是併進 errors：
+      errors 是四個聯絡欄位的 useMemo，型別是 Record<FieldKey,…>，硬塞會讓
+      focusFirstError 去找一個不存在的 name。發票的錯誤由 InvoiceOptions
+      自己顯示在對應欄位下方，這裡只負責擋住送出並把焦點帶過去。
+    */
+    const invoiceError = validateInvoice(invoice);
+    if (invoiceError) {
+      setFormError(invoiceError.message);
+      window.requestAnimationFrame(() => {
+        const el = formRef.current?.querySelector<HTMLElement>(
+          `[name="invoice_${invoiceError.field === "carrierId" ? "carrier_id" : invoiceError.field === "taxId" ? "tax_id" : "title"}"]`,
+        );
+        el?.focus();
+      });
+      return;
+    }
+
     setFormError(null);
     setBusy(true);
 
@@ -205,6 +226,12 @@ export function CheckoutView() {
           address: address.trim(),
           note: note.trim(),
           payment,
+          invoice: {
+            carrierType: invoice.carrierType,
+            carrierId: invoice.carrierId.trim(),
+            taxId: invoice.taxId.trim(),
+            title: invoice.title.trim(),
+          },
           // 報名問題。沒有工作坊時全部是空的，後端會存 null。
           intake: needsIntake
             ? {
@@ -495,6 +522,8 @@ export function CheckoutView() {
               )}
 
               <PaymentOptions value={payment} onChange={setPayment} />
+
+        <InvoiceOptions value={invoice} onChange={setInvoice} showErrors={submitted} />
             </div>
 
             {/* 訂單摘要：桌機 sticky 在右側，手機排在表單下方，

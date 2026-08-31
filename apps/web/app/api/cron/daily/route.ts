@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { flushOutbox } from "@/lib/email/outbox";
+import { flushInvoices } from "@/lib/invoice/issue";
 import { grantEntitlementsForOrder } from "@/lib/admin/entitlements";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,23 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[cron/daily] flushOutbox 失敗", error);
     result.email = { error: (error as Error).message };
+  }
+
+  /*
+    1b) 把開失敗的發票重試一次。
+
+    ⚠️ 這個站的 Vercel 是 Hobby 方案，cron 一天只跑一次（01:00），所以這支
+       **不是**讓客人準時拿到發票的主力 —— 那是付款當下 APN／後台標記時的
+       立即嘗試。這裡專門接住「當下失敗、或 Amego 剛好連不上」的那些。
+
+    ⚠️ 一天一次代表最壞情況客人要等到隔天凌晨才有發票。要縮短就得升
+       Vercel Pro（cron 才能設分鐘級）或把 apps/worker 真的部署起來。
+  */
+  try {
+    result.invoice = await flushInvoices();
+  } catch (error) {
+    console.error("[cron/daily] flushInvoices 失敗", error);
+    result.invoice = { error: (error as Error).message };
   }
 
   const db = createServiceClient();

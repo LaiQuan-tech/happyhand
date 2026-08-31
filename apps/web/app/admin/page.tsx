@@ -91,7 +91,8 @@ export default async function AdminDashboardPage() {
           「客人付了錢但看不到課」如果沒有一個每天會被看到的地方顯示，
           就要等客人打 LINE 來罵才會發現。沒有異常時整塊不渲染，
           免得變成永遠都在的裝飾品而被忽略。 */}
-      {health && (health.unfulfilled > 0 || health.failedEmails > 0) && (
+      {health &&
+        (health.unfulfilled > 0 || health.failedEmails > 0 || health.stuckInvoices > 0) && (
         <section className="rounded-card border border-danger bg-paper p-4 admin:p-5">
           <h2 className="text-[16px] font-medium text-danger">需要處理</h2>
           <ul className="mt-2 flex flex-col gap-2 text-[14px] leading-relaxed text-ink">
@@ -112,6 +113,19 @@ export default async function AdminDashboardPage() {
                 有 <strong className="text-danger">{health.failedEmails}</strong>{" "}
                 封信重試多次仍寄不出去（訂單通知或設定密碼信）。
                 請確認客人的 Email 是否打錯，或改用 LINE 通知。
+              </li>
+            )}
+            {health.stuckInvoices > 0 && (
+              <li>
+                有 <strong className="text-danger">{health.stuckInvoices}</strong>{" "}
+                筆訂單的電子發票還沒開出來 —— 這些客人拿不到稅務憑證。
+                進訂單頁看「電子發票」那一區有寫卡在哪。
+                <Link
+                  href="/admin/orders?status=paid"
+                  className="ml-1 text-accent-ink underline"
+                >
+                  去處理
+                </Link>
               </li>
             )}
           </ul>
@@ -261,16 +275,23 @@ async function loadOrderStats(db: Db | null) {
  * 查不到就當作沒事，總覽的其他部分照常運作。失敗會進 log。
  */
 async function loadHealthStats(db: Db | null) {
-  const empty = { unfulfilled: 0, failedEmails: 0 };
+  const empty = { unfulfilled: 0, failedEmails: 0, stuckInvoices: 0 };
   if (!db) return empty;
 
   try {
-    const [unfulfilled, failed] = await Promise.all([
+    const [unfulfilled, failed, invoices] = await Promise.all([
       db.rpc("count_unfulfilled_paid_orders"),
       db
         .from("email_outbox")
         .select("id", { count: "exact", head: true })
         .eq("status", "failed"),
+      /*
+        發票異常。
+        ⚠️ 這一行的存在本身就是重點：payment 那邊也有一支 count_payment_alerts()，
+           寫好了卻**沒有任何畫面呼叫它**，所以「客人付了錢但金額對不上」這件事
+           至今沒有任何人看得到。不要讓發票重蹈覆轍。
+      */
+      db.rpc("count_invoice_alerts"),
     ]);
 
     if (unfulfilled.error) {
@@ -280,9 +301,23 @@ async function loadHealthStats(db: Db | null) {
       console.error("[admin] 寄信失敗數查詢失敗", failed.error.message);
     }
 
+    if (invoices.error) {
+      console.error("[admin] 發票異常查詢失敗", invoices.error.message);
+    }
+
+    // RPC 回的是一列三個計數。三種都是「客人拿不到發票」，加總成一個數字就好 ——
+    // 客服要的是「有幾筆要看」，細節在訂單頁上。
+    const invRow = (Array.isArray(invoices.data) ? invoices.data[0] : invoices.data) as
+      | { pending_overdue?: number; stuck_issuing?: number; exhausted?: number }
+      | null;
+
     return {
       unfulfilled: typeof unfulfilled.data === "number" ? unfulfilled.data : 0,
       failedEmails: failed.count ?? 0,
+      stuckInvoices:
+        Number(invRow?.pending_overdue ?? 0) +
+        Number(invRow?.stuck_issuing ?? 0) +
+        Number(invRow?.exhausted ?? 0),
     };
   } catch (err) {
     console.error("[admin] 健康度統計查詢失敗", err);

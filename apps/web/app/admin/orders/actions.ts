@@ -8,6 +8,7 @@ import {
   type GrantResult,
 } from "@/lib/admin/entitlements";
 import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
+import { ensureInvoiceRow, issueForOrder, voidForOrder } from "@/lib/invoice/issue";
 import { orderPaidEmail } from "@/lib/email/templates";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
@@ -189,14 +190,53 @@ async function transitionOrder(
     await queuePaidEmail(supabase, orderId, grant.products);
   }
 
+  /*
+    9) 電子發票。
+
+    轉成 paid → 建立待開立列並立刻試開一次。ensureInvoiceRow 與 issueForOrder
+       都是冪等的，所以「客服先按、APN 後到」兩條路都跑過也只會有一張發票。
+
+    轉成 refunded → 作廢發票。
+       ⚠️ 作廢失敗**不擋退款**：訂單狀態已經改完了，這裡再 throw 只會讓客服
+          看到一個失敗訊息卻不知道退款到底有沒有成功。失敗的訊息會併進下面的
+          警告一起回去。
+
+    整段包在自己的 try：發票是附帶動作，不可以讓它把主要流程弄壞。
+  */
+  let invoiceNote = "";
+  try {
+    if (to === "paid") {
+      if (await ensureInvoiceRow(orderId)) {
+        const out = await issueForOrder(orderId);
+        if (out.status === "failed") {
+          invoiceNote = `發票開立失敗（${out.reason}），可稍後重試。`;
+          console.error("[orders/transition] 開立發票失敗", orderId, out.reason);
+        }
+      }
+    } else if (to === "refunded") {
+      const voided = await voidForOrder(orderId, "訂單退款");
+      if (!voided.ok) {
+        invoiceNote = `發票作廢失敗（${voided.reason}），請到 Amego 後台手動處理。`;
+        console.error("[orders/transition] 作廢發票失敗", orderId, voided.reason);
+      }
+    }
+  } catch (err) {
+    invoiceNote = "發票處理發生例外，請檢查後台紀錄。";
+    console.error("[orders/transition] 發票流程例外", orderId, err);
+  }
+
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);
 
   // 狀態已經改成功了，但後面有一段沒做完 —— 必須講出來。
   // 這裡回 error 而不是靜默成功：客服看到訊息才會去補，
   // 靜默的話「付了錢看不到課」要等客人打 LINE 來罵才會發現。
+  //
+  // 順序＝嚴重度。課程沒開通 > 名額沒同步 > 發票沒開：
+  // 前兩個客人當下就受影響，發票晚幾小時補開沒關係（而且會自動重試）。
   if (grant?.warning) return { error: grant.warning };
   if (seatOutcome.warning) return { error: seatOutcome.warning };
+  if (invoiceNote) return { error: invoiceNote };
   return {};
 }
 

@@ -10,6 +10,10 @@ import {
   OrderAccountPanel,
   type OrderAccountInfo,
 } from "@/components/admin/order-account-panel";
+import {
+  OrderInvoicePanel,
+  type OrderInvoiceInfo,
+} from "@/components/admin/order-invoice-panel";
 import { OrderStatusChip } from "../status-chip";
 import { money, paymentMethodLabel } from "../shared";
 
@@ -95,7 +99,8 @@ export default async function AdminOrderDetailPage({
   const { data: orderRaw, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id, order_no, status, payment_method, total, price_unverified, user_id, contact_name, contact_phone, contact_email, shipping_address, note, created_at, updated_at, paid_at",
+      "id, order_no, status, payment_method, total, price_unverified, user_id, contact_name, contact_phone, contact_email, shipping_address, note, created_at, updated_at, paid_at, " +
+        "invoice_carrier_type, invoice_carrier_id, invoice_tax_id, invoice_title",
     )
     .eq("id", id)
     .maybeSingle();
@@ -123,6 +128,43 @@ export default async function AdminOrderDetailPage({
   const items = (itemsRaw ?? []) as ItemRow[];
   const itemsTotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
 
+  // 發票。查不到不擋整頁（同品項的判準）—— 面板會顯示「尚未建立」。
+  const { data: invoiceRaw, error: invoiceError } = await supabase
+    .from("invoices")
+    .select(
+      "status, invoice_number, random_code, issued_at, voided_at, retry_count, issue_attempts, last_error, next_attempt_at",
+    )
+    .eq("order_id", id)
+    .maybeSingle();
+
+  if (invoiceError) {
+    console.error("[admin/orders] 讀取發票失敗", id, invoiceError.message);
+  }
+
+  const invoiceRow = invoiceRaw as Record<string, unknown> | null;
+  const orderExtra = order as unknown as Record<string, string | null>;
+  const invoiceInfo: OrderInvoiceInfo = {
+    orderId: order.id,
+    orderStatus: order.status,
+    carrierType: orderExtra.invoice_carrier_type ?? null,
+    carrierId: orderExtra.invoice_carrier_id ?? null,
+    taxId: orderExtra.invoice_tax_id ?? null,
+    title: orderExtra.invoice_title ?? null,
+    invoice: invoiceRow
+      ? {
+          status: String(invoiceRow.status ?? "pending"),
+          invoiceNumber: (invoiceRow.invoice_number as string | null) ?? null,
+          randomCode: (invoiceRow.random_code as string | null) ?? null,
+          issuedAt: formatTaipei(invoiceRow.issued_at as string | null) || null,
+          voidedAt: formatTaipei(invoiceRow.voided_at as string | null) || null,
+          retryCount: Number(invoiceRow.retry_count ?? 0),
+          issueAttempts: Number(invoiceRow.issue_attempts ?? 0),
+          lastError: (invoiceRow.last_error as string | null) ?? null,
+          nextAttemptAt: formatTaipei(invoiceRow.next_attempt_at as string | null) || null,
+        }
+      : null,
+  };
+
   const accountInfo = await loadAccountInfo(supabase, order, items);
 
   return (
@@ -145,6 +187,8 @@ export default async function AdminOrderDetailPage({
       {order.price_unverified && <PriceUnverifiedBanner total={order.total} />}
 
       <OrderAccountPanel info={accountInfo} canWrite={canWrite} />
+
+      <OrderInvoicePanel info={invoiceInfo} canWrite={canWrite} />
 
       <Panel title="訂單資訊">
         <DescList>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { grantEntitlementsForOrder } from "@/lib/admin/entitlements";
+import { ensureInvoiceRow, issueForOrder } from "@/lib/invoice/issue";
 import {
   APN_STATUS,
   queryOrder,
@@ -257,6 +258,26 @@ export async function POST(request: Request) {
   // updated 是 null 代表訂單已經不是 pending（例如客服先手動標記過），
   // 這不是錯誤 —— 照樣往下開通，grant 本身是冪等的。
   const grant = await grantEntitlementsForOrder(order.id);
+
+  /*
+    電子發票。刻意放在開通課程**之後**、而且整段包在自己的 try 裡：
+    錢已經收了、課要開通，發票開不出來絕不可以讓這支 APN 回非 200 ——
+    那會讓黑貓 PAY 每 15 分鐘重送，而重送不會讓發票變得開得出來。
+
+    ensureInvoiceRow 是冪等的（unique amego_order_id），所以客服先手動標記過、
+    APN 再進來的情況重複呼叫也安全。
+    issueForOrder 內部有 claim，不會因為兩條路都跑而開出兩張。
+  */
+  try {
+    if (await ensureInvoiceRow(order.id)) {
+      const out = await issueForOrder(order.id);
+      if (out.status === "failed") {
+        console.error("[blackcat/apn] 開立發票失敗（不影響付款）", orderNo, out.reason);
+      }
+    }
+  } catch (err) {
+    console.error("[blackcat/apn] 發票流程例外（不影響付款）", orderNo, err);
+  }
 
   // 🔴 工作坊名額同步。只有這次真的把訂單從 pending 改成 paid 才做，
   //    否則客服先手動標記過、APN 再進來就會重複加一次。

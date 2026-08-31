@@ -7,6 +7,11 @@ import { findOrCreateUser, generateSetupLink } from "@/lib/account/provision";
 import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
 import { accountSetupEmail, orderCreatedEmail } from "@/lib/email/templates";
 import { createCreditOrder, isBlackcatConfigured } from "@/lib/payment/blackcat";
+import {
+  isCarrierType,
+  normalizeInvoice,
+  validateInvoice,
+} from "@/lib/invoice/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,6 +169,29 @@ export async function POST(request: Request) {
         health_ack_at: null,
       };
 
+  /*
+   * 發票的載具／統編。
+   * 🔴 一定要在 server 再驗一次：前端的 InvoiceOptions 擋得住手滑，擋不住
+   *    直接打這支 API。錯的載具送到 Amego 只會變成一列開不出來的失敗紀錄，
+   *    而那時客人已經付完錢離開了。
+   */
+  const invoiceRaw = (body.invoice ?? null) as Record<string, unknown> | null;
+  const invoiceInput = {
+    carrierType: isCarrierType(invoiceRaw?.carrierType) ? invoiceRaw.carrierType : "cloud",
+    carrierId: str(invoiceRaw?.carrierId, 64),
+    taxId: str(invoiceRaw?.taxId, 8),
+    title: str(invoiceRaw?.title, 60),
+  } as const;
+  const invoiceError = validateInvoice(invoiceInput);
+  if (invoiceError) return bad(invoiceError.message);
+  const normalized = normalizeInvoice(invoiceInput);
+  const invoice = {
+    invoice_carrier_type: normalized.carrierType,
+    invoice_carrier_id: normalized.carrierId,
+    invoice_tax_id: normalized.taxId,
+    invoice_title: normalized.title,
+  };
+
   if (!name) return bad("請填姓名。");
   if (!PHONE_RE.test(phone)) return bad("手機號碼是 09 開頭、總共 10 個數字。");
   if (!EMAIL_RE.test(email)) return bad("Email 格式看起來不太對，請再檢查一次。");
@@ -277,6 +305,7 @@ export async function POST(request: Request) {
         note,
         lines,
         intake,
+        invoice,
       })
     : null;
   const persisted = orderId !== null;
@@ -591,6 +620,12 @@ async function persist(
       intake_source: string | null;
       health_ack_at: string | null;
     };
+    invoice: {
+      invoice_carrier_type: string;
+      invoice_carrier_id: string | null;
+      invoice_tax_id: string | null;
+      invoice_title: string | null;
+    };
   },
 ) {
   const base = {
@@ -617,6 +652,13 @@ async function persist(
     // 報名問題（工作坊才會有值）。放在 rich 而不是 base：
     // base 是「連 contact_* 都寫不進去時」的退路，那種情況下這幾欄更不可能寫得進去。
     ...o.intake,
+    /*
+      發票的載具／統編。同樣放在 rich 不放 base。
+      ⚠️ 掉到 base 那條退路的訂單會沒有載具資料，開票時 carrier_type 會是 null
+         → issue.ts 視同 cloud（雲端發票）。這是刻意的：寧可開一張雲端發票
+         讓客人事後歸戶，也不要因為載具寫不進去就整張訂單開不成。
+    */
+    ...o.invoice,
   };
 
   let orderId: string | null = null;
