@@ -35,6 +35,13 @@ export type SingleImageFieldProps = {
   kind: MediaKind;
   defaultUrl?: string | null;
   hint?: string;
+  /**
+   * 要歸屬到哪一張表單。
+   * 這個欄位不一定放在 <form> 元素裡面 —— 課程編輯頁把欄位照前台順序攤在
+   * 頁面各處，靠原生的 form 屬性歸隊。沒傳就是「用最近的祖先 form」。
+   */
+  form?: string;
+  wrapperClassName?: string;
 };
 
 const DEFAULT_HINT =
@@ -51,6 +58,8 @@ export function SingleImageField({
   kind,
   defaultUrl,
   hint,
+  form,
+  wrapperClassName = "",
 }: SingleImageFieldProps): JSX.Element {
   const [url, setUrl] = useState<string>(defaultUrl ?? "");
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -93,7 +102,7 @@ export function SingleImageField({
   }
 
   return (
-    <div>
+    <div className={wrapperClassName}>
       <AdminFieldLabel htmlFor={inputId}>{label}</AdminFieldLabel>
 
       {/*
@@ -102,13 +111,15 @@ export function SingleImageField({
         送出時 <form action={serverAction}> 會自然把它序列化進 FormData ——
         父表單不需要改成受控，也不用把 state 提上去。
       */}
-      <input type="hidden" name={name} value={url} readOnly />
+      <input type="hidden" name={name} value={url} form={form} readOnly />
 
       <div className="flex flex-col gap-3 admin:flex-row admin:items-start">
-        {/* 預覽框固定 4:3：課程封面在前台是 object-cover，用同樣的裁切方式預覽，
-            員工才看得出「上面那行字會不會被切掉」。 */}
+        {/* 預覽框固定 16:9：前台的課程頁與工作坊頁都是 aspect-[16/9]
+            （courses/[slug]/page.tsx:99、workshops/[slug]/page.tsx:126），
+            用同樣的比例預覽，員工才看得出「上面那行字會不會被切掉」。
+            ⚠️ 前台改比例的話這裡要跟著改，不然後台預覽會騙人。 */}
         <div
-          className={`relative aspect-4/3 w-full shrink-0 overflow-hidden rounded-input border admin:w-56 ${
+          className={`relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-input border admin:w-[420px] ${
             url ? "border-line-strong bg-panel" : "border-line-input border-dashed bg-panel"
           }`}
         >

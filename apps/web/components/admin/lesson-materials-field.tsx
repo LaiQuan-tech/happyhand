@@ -136,7 +136,7 @@ export function LessonMaterialsField({
 
       {lessonId === "" ? (
         <p className="mt-2 text-[13px] text-ink-soft">
-          先按上面的「儲存變更」把這個單元存起來，才能上傳{label}。
+          先按下面的「儲存單元」把這個單元存起來，才能上傳{label}。
         </p>
       ) : (
         <div className="mt-2">

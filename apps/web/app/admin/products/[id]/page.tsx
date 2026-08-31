@@ -2,7 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCapability, adminErrorMessage, AdminAuthError } from "@/lib/admin/guard";
 import { createServiceClient } from "@/lib/supabase/server";
-import { ProductForm } from "@/components/admin/product-form";
+import {
+  ProductAudienceSection,
+  ProductCoverSection,
+  ProductCurriculumSection,
+  ProductFormAnchor,
+  ProductIncludesSection,
+  ProductIntroSection,
+  ProductNotesSection,
+  ProductSaveBar,
+  ProductSettingsSection,
+} from "@/components/admin/product-form";
 import { LessonEditor } from "@/components/admin/lesson-editor";
 import { SessionEditor } from "@/components/admin/session-editor";
 import { BlockEditor } from "@/components/admin/block-editor";
@@ -20,6 +30,7 @@ import {
 import {
   FormNotice,
   LoadError,
+  MirrorNote,
   PermissionDenied,
   PublishChip,
   SectionHeader,
@@ -32,41 +43,64 @@ import {
  * id === "new" 走新增。用同一個路由而不是另開 /admin/products/new/page.tsx，
  * 表單與驗證只會有一份。
  *
- * 單元／場次區塊只在編輯既有課程時出現：它們都需要 product_id 才掛得上去，
+ * 🔑 這一頁的區段順序 = 前台頁面由上到下的區塊順序。
+ *    改順序之前請先開一次 /workshops/{slug} 對照，兩邊要一致 ——
+ *    整個設計的用途就是「照著填就等於在排前台的版面」。
+ *    對照表見下面的 FRONT_END_ORDER 註解。
+ *
+ * 單元／場次／區塊只在編輯既有課程時出現：它們都需要 product_id 才掛得上去，
  * 新增時還沒有。所以新增成功後 redirect 到 ?msg=created，
  * 那句話會告訴使用者現在可以往下編輯了。
  */
 
 export const dynamic = "force-dynamic";
 
-/** 報名頁區塊的顯示順序與說明。順序就是後台的排列順序。 */
-const BLOCK_SECTIONS = [
-  {
-    kind: "faq",
-    title: "常見問題",
-    description: "客人最常問的問題。前台是可以點開收合的手風琴。",
-  },
-  {
-    kind: "step",
+/*
+  FRONT_END_ORDER —— 前台工作坊頁（app/(storefront)/workshops/[slug]/page.tsx）
+  由上到下的區塊，以及它在這一頁對應的區段：
+
+     封面大圖          cover_url            → ProductCoverSection
+     標題／副標／簡介／引言／賣點             → ProductIntroSection
+     場次與報名        workshop_sessions    → SessionEditor
+     適合／不適合／學完之後                   → ProductAudienceSection
+     學習路徑          block "step"
+     課程內容（線上／實體）                   → ProductCurriculumSection
+     陪伴機制          block "feature"
+     一次報名全部帶走  includes             → ProductIncludesSection
+     報名前先確認      block "info_row"
+     費用方案          block "pricing"
+     講師介紹          site_settings        → MirrorNote（在 /admin/settings 改）
+     常見問題          block "faq"
+     健康聲明          site_settings        → MirrorNote（在 /admin/settings 改）
+     上課地點          取自第一場場次        → MirrorNote
+     來之前先知道      notes                → ProductNotesSection
+*/
+
+/** 五種報名頁區塊的標題與說明。key 是 product_blocks.kind。 */
+const BLOCK_META = {
+  step: {
     title: "學習路徑",
     description: "從報名到完課的階段。前台會自動編號 01、02…",
   },
-  {
-    kind: "info_row",
-    title: "報名資訊",
-    description: "課程費用、上課地點、付款方式這類「項目：內容」的對照表。",
+  feature: {
+    title: "陪伴機制",
+    description: "教學特色、課後支援這類說明，前台排成三欄卡片。",
   },
-  {
-    kind: "pricing",
+  info_row: {
+    title: "報名前先確認",
+    description: "「項目：內容」的對照表，例如上課地點、付款方式、退費規則。",
+  },
+  pricing: {
     title: "費用方案",
     description: "新生價、複訓價等不同方案。可以各自帶金額與附註。",
   },
-  {
-    kind: "feature",
-    title: "特色說明",
-    description: "陪伴機制、教學特色這類三欄卡片。",
+  faq: {
+    title: "常見問題",
+    description: "客人最常問的問題。前台是可以點開收合的手風琴。",
   },
-] as const;
+} as const;
+
+type BlockKind = keyof typeof BLOCK_META;
 
 export default async function AdminProductEditPage({
   params,
@@ -90,11 +124,20 @@ export default async function AdminProductEditPage({
   const isNew = id === "new";
 
   if (isNew) {
+    /*
+      新增時的任務跟編輯不一樣：這裡要先把「這門課是什麼」建立起來，
+      內容可以之後再慢慢填。所以設定排在最前面（而且它才有必填欄位），
+      圖片與標題跟著，其餘區段等有了 id 再出現。
+    */
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <Header title="新增課程" />
         {notice && <FormNotice code={notice} />}
-        <ProductForm product={null} />
+        <ProductFormAnchor product={null} />
+        <ProductSettingsSection product={null} />
+        <ProductCoverSection product={null} />
+        <ProductIntroSection product={null} />
+        <ProductSaveBar isNew />
       </div>
     );
   }
@@ -182,6 +225,94 @@ export default async function AdminProductEditPage({
   const showLessons = product.type === "course" || lessons.length > 0;
   const showSessions = product.type === "workshop" || sessions.length > 0;
 
+  /*
+    🔴 線上課程頁（app/(storefront)/courses/[slug]/page.tsx）**不渲染**
+       hero_lead / subtitle / suitable_for / not_suitable_for / outcomes /
+       curriculum_online / curriculum_onsite / includes / notes，
+       以及全部五種 product_blocks（那一頁的講師與 FAQ 是寫死在
+       lib/content.ts 的常數，不讀資料庫）。
+
+       欄位還是留著能填 —— 資料不會消失，日後課程頁支援了就直接有內容 ——
+       但要講清楚現在填了不會顯示，否則就是另一個「填了沒反應」的靜默無效。
+  */
+  const workshopOnlyIsDead = product.type === "course";
+
+  // 區段編號：連號產生，被條件隱藏的區段不會留下斷號。
+  // server component 只 render 一次，JSX 由上到下求值，所以計數是穩定的。
+  let stepCounter = 0;
+  const nextStep = () => String(++stepCounter);
+
+  const publicHref =
+    product.type === "workshop"
+      ? `/workshops/${product.slug}`
+      : `/courses/${product.slug}`;
+
+  const workshopOnlySections = (
+    <>
+      <ProductAudienceSection product={product} step={nextStep()} />
+
+      <BlockSection
+        productId={product.id}
+        kind="step"
+        step={nextStep()}
+        blocks={blocks}
+      />
+
+      <ProductCurriculumSection product={product} step={nextStep()} />
+
+      <BlockSection
+        productId={product.id}
+        kind="feature"
+        step={nextStep()}
+        blocks={blocks}
+      />
+
+      <ProductIncludesSection product={product} step={nextStep()} />
+
+      <BlockSection
+        productId={product.id}
+        kind="info_row"
+        step={nextStep()}
+        blocks={blocks}
+      />
+
+      <BlockSection
+        productId={product.id}
+        kind="pricing"
+        step={nextStep()}
+        blocks={blocks}
+      />
+
+      <MirrorNote title="講師介紹">
+        這一段前台會顯示，但不是在這裡改 —— 講師照片、介紹與經歷是全站共用的，
+        請到{" "}
+        <Link href="/admin/settings" className="text-accent-ink underline underline-offset-4">
+          網站設定
+        </Link>
+        。
+      </MirrorNote>
+
+      <BlockSection productId={product.id} kind="faq" step={nextStep()} blocks={blocks} />
+
+      <MirrorNote title="健康聲明">
+        前台在常見問題底下會顯示一段健康聲明，內容同樣是全站共用的，
+        請到{" "}
+        <Link href="/admin/settings" className="text-accent-ink underline underline-offset-4">
+          網站設定
+        </Link>
+        。
+      </MirrorNote>
+
+      <MirrorNote title="上課地點">
+        前台的地點與地圖是取自這門課
+        <span className="font-medium text-ink">最近一場</span>
+        場次的「地點名稱」與「地址」。要改的話回到上面的場次那一段改，這裡沒有另外的欄位。
+      </MirrorNote>
+
+      <ProductNotesSection product={product} step={nextStep()} />
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <Header
@@ -195,6 +326,21 @@ export default async function AdminProductEditPage({
         }
         actions={
           <>
+            {/*
+              對照用的連結。這一頁的區段順序刻意等於前台的區塊順序，
+              開著前台頁面對照著填是它的用法。
+              未上架的課程前台是 404（RLS 擋掉），所以只有上架時才給連結。
+            */}
+            {product.is_published && (
+              <Link
+                href={publicHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-input border border-line-input bg-paper px-4 text-[14px] font-medium text-ink transition-colors hover:bg-panel admin:min-h-10"
+              >
+                看前台這一頁
+              </Link>
+            )}
             <ConfirmButton
               action={togglePublish.bind(null, product.id, !product.is_published)}
               confirmText={
@@ -222,18 +368,50 @@ export default async function AdminProductEditPage({
 
       {notice && <FormNotice code={notice} />}
 
-      <section className="flex flex-col gap-4">
-        <SectionHeader title="基本資料" />
-        <ProductForm product={product} />
-      </section>
+      <p className="rounded-card bg-panel px-4 py-3 text-[13px] leading-relaxed text-ink-soft">
+        下面的順序就是前台頁面由上到下的順序，從第 1 段開始往下填，
+        填到最後就是完整的一頁。留空的段落在前台不會出現，不需要的直接跳過。
+      </p>
+
+      {/* 🔑 承接 action 的空表單。底下的商品欄位靠 form 屬性歸隊，見 product-form.tsx 檔頭。 */}
+      <ProductFormAnchor product={product} />
+
+      <ProductCoverSection product={product} step={nextStep()} />
+
+      <ProductIntroSection product={product} step={nextStep()} />
+      {workshopOnlyIsDead && (
+        <p className="-mt-2 text-[13px] leading-relaxed text-ink-soft">
+          ⚠️ 線上課程頁目前不顯示「副標」與「引言」這兩欄，其餘照常顯示。
+        </p>
+      )}
+
+      {/*
+        ⑦ 這一格放「這門課要賣的東西」：工作坊頁的場次、課程頁的單元，
+        在各自的前台頁面都緊接在介紹之後。兩者都有資料時就兩個都出現。
+      */}
+      {showSessions && (
+        <section id="sessions" className="flex flex-col gap-4 border-t border-line pt-6">
+          <SectionHeader
+            step={nextStep()}
+            title="場次與報名"
+            description={
+              product.type === "workshop"
+                ? "前台在介紹底下就是這一區，是整頁最重要的部分。已報名人數由結帳流程維護，這裡看得到但改不了；要微調請到「場次報名」。"
+                : "這門課的類型不是實體工作坊，但它底下已經有場次（例如線上課另外開的實體班），所以一併列出來讓你能編輯。"
+            }
+          />
+          <SessionEditor productId={product.id} sessions={sessions} />
+        </section>
+      )}
 
       {showLessons && (
         <section id="lessons" className="flex flex-col gap-4 border-t border-line pt-6">
           <SectionHeader
+            step={nextStep()}
             title="課程單元"
             description={
               product.type === "course"
-                ? "調整順序不會動到學員已經看到的進度。移除單元則會連進度一起刪掉。"
+                ? "前台在介紹底下就是這一區，學員買了之後也是在這裡上課。調整順序不會動到學員已經看到的進度；移除單元則會連進度一起刪掉。"
                 : "這門課的類型不是線上課程，但它底下已經有單元，所以一併列出來讓你能編輯。"
             }
           />
@@ -242,41 +420,57 @@ export default async function AdminProductEditPage({
       )}
 
       {/*
-        報名頁的內容區塊。每一種都可以增減與排序，全部留空就不會顯示在前台。
-        一個 BlockEditor 吃 kind 參數重用五次 —— 它們的差別只有標籤文字。
+        線上課程頁還沒支援下面這些區段（見上面 workshopOnlyIsDead 的說明）。
+        收起來而不是拿掉：資料還在，也還能先寫好等前台支援。
+        ⚠️ <details> 裡面不可以放 required 欄位 —— 收合時瀏覽器沒辦法把焦點
+           移到看不見的欄位，會靜默拒絕送出。這裡面全部是選填 textarea 與
+           沒有 required 的 BlockEditor，已確認過。
       */}
-      <section className="flex flex-col gap-6 border-t border-line pt-6">
-        <SectionHeader
-          title="報名頁區塊"
-          description="常見問題、學習路徑、報名資訊、費用方案與特色說明。每一區留空就不會出現在前台。"
-        />
-        {BLOCK_SECTIONS.map((sec) => (
-          <div key={sec.kind} className="flex flex-col gap-3">
-            <h3 className="text-[15px] font-medium text-ink">{sec.title}</h3>
-            <p className="text-[13px] text-ink-soft">{sec.description}</p>
-            <BlockEditor
-              productId={product.id}
-              kind={sec.kind}
-              blocks={blocks.filter((b) => b.kind === sec.kind)}
-            />
-          </div>
-        ))}
-      </section>
-
-      {showSessions && (
-        <section id="sessions" className="flex flex-col gap-4 border-t border-line pt-6">
-          <SectionHeader
-            title="工作坊場次"
-            description={
-              product.type === "workshop"
-                ? "已報名人數由結帳流程維護，在這裡看得到但改不了；要微調請到「場次報名」。"
-                : "這門課的類型不是實體工作坊，但它底下已經有場次（例如線上課另外開的實體班），所以一併列出來讓你能編輯。"
-            }
-          />
-          <SessionEditor productId={product.id} sessions={sessions} />
-        </section>
+      {workshopOnlyIsDead ? (
+        <details className="rounded-card border border-dashed border-line-strong bg-panel px-4 py-3">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center text-[15px] font-medium text-ink admin:min-h-10 [&::-webkit-details-marker]:hidden">
+            ＋ 工作坊報名頁專用的段落（線上課程頁目前不會顯示）
+          </summary>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+            這些欄位填了會存起來，但線上課程的前台頁面現在還沒有這幾段版面，
+            所以客人看不到。工作坊則會照常顯示。
+            線上課程頁的講師介紹與常見問題目前是寫死在程式裡的，改這裡或網站設定都不會變動。
+          </p>
+          <div className="mt-4 flex flex-col gap-6">{workshopOnlySections}</div>
+        </details>
+      ) : (
+        workshopOnlySections
       )}
+
+      <ProductSettingsSection product={product} step={nextStep()} />
+
+      <ProductSaveBar isNew={false} />
     </div>
+  );
+}
+
+/** 一種報名頁區塊 = 一個區段。標題與說明來自 BLOCK_META。 */
+function BlockSection({
+  productId,
+  kind,
+  step,
+  blocks,
+}: {
+  productId: string;
+  kind: BlockKind;
+  step: string;
+  blocks: BlockRow[];
+}) {
+  const meta = BLOCK_META[kind];
+  return (
+    <section className="flex flex-col gap-4 border-t border-line pt-6">
+      <SectionHeader step={step} title={meta.title} description={meta.description} />
+      <BlockEditor
+        productId={productId}
+        kind={kind}
+        blocks={blocks.filter((b) => b.kind === kind)}
+      />
+    </section>
   );
 }
 

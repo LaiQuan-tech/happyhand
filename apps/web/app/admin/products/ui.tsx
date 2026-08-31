@@ -113,29 +113,73 @@ export function FormNotice({ code }: { code: string }) {
   );
 }
 
-/** 表單區塊的標題 + 說明 */
+/**
+ * 表單區塊的標題 + 說明。
+ *
+ * step 是「這是前台頁面由上到下的第幾段」。編輯頁的區段順序刻意等同
+ * 前台頁面的區塊順序，編號讓人確認自己沒有跳著填。
+ * 編號在頁面端連號產生（見 [id]/page.tsx 的 nextStep），區段被條件隱藏時
+ * 也不會出現 ①②③⑤ 這種斷號。
+ */
 export function SectionHeader({
   title,
   description,
   id,
+  step,
   actions,
 }: {
   title: string;
   description?: ReactNode;
   id?: string;
+  /** 顯示在標題左邊的順序徽章，例如 "3" */
+  step?: string;
   actions?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 id={id} className="font-serif text-[19px] leading-tight font-medium text-ink">
-          {title}
-        </h2>
-        {description && (
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{description}</p>
+      <div className="flex min-w-0 gap-2.5">
+        {step && (
+          // aria-hidden：這是視覺上的定位輔助，朗讀出來只會在每個標題前面
+          // 多念一個數字。順序對讀螢幕的人來說是 DOM 順序本身。
+          <span
+            aria-hidden="true"
+            className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-pill bg-accent-soft text-[13px] font-medium text-ink"
+          >
+            {step}
+          </span>
         )}
+        <div className="min-w-0">
+          <h2 id={id} className="font-serif text-[19px] leading-tight font-medium text-ink">
+            {title}
+          </h2>
+          {description && (
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{description}</p>
+          )}
+        </div>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * 「這一段前台會顯示，但不是在這裡改」的唯讀提示。
+ *
+ * 前台頁面上有幾塊內容不屬於這門課（講師、健康聲明來自 site_settings，
+ * 上課地點來自場次）。編輯頁照前台順序排的時候要是直接跳過它們，
+ * 看的人會以為那些東西不存在或不見了。留一塊提示並指出去哪裡改。
+ */
+export function MirrorNote({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-card border border-dashed border-line-strong bg-panel px-4 py-3">
+      <p className="text-[14px] font-medium text-ink">{title}</p>
+      <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{children}</p>
     </div>
   );
 }
