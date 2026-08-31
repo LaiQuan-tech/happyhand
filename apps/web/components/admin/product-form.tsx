@@ -443,12 +443,18 @@ export function ProductSettingsSection({ product, step }: SectionProps) {
  * ⚠️ 手機上底部有 AdminBottomNav（fixed、約 55px + 安全區），
  *    sticky bottom-0 會被它蓋住，所以要往上讓開；admin: 以上那個列不存在，
  *    貼齊底部即可。
+ *
+ * 🔴 它只送 product-content 這一張表單。因為現在它常駐在畫面底部、
+ *    等於貼在每一個區段旁邊，按下去會 redirect —— 場次／單元／區塊
+ *    編輯器裡還沒按過自己那顆儲存鈕的輸入會全部消失（BlockEditor 的
+ *    新增與排序只活在 client state，一次 redirect 就歸零）。
+ *    標籤與說明因此刻意寫成「課程資料」而不是「這一頁」。
  */
 export function ProductSaveBar({ isNew }: { isNew: boolean }) {
   return (
     <div className="sticky bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-paper px-4 py-3 admin:bottom-0 admin:-mx-6 admin:px-6">
       <button type="submit" form={PRODUCT_FORM_ID} className={adminPrimaryButton}>
-        {isNew ? "建立課程" : "儲存這一頁的內容"}
+        {isNew ? "建立課程" : "儲存課程資料"}
       </button>
       <Link href="/admin/products" className={adminSecondaryButton}>
         取消
@@ -456,7 +462,7 @@ export function ProductSaveBar({ isNew }: { isNew: boolean }) {
       <p className="text-[13px] text-ink-soft">
         {isNew
           ? "建立之後才能編輯單元與場次（它們需要先有課程才掛得上去）。"
-          : "這一顆會存下整頁的文字與圖片。單元、場次、報名頁區塊各自有自己的儲存鈕。"}
+          : "不含場次、單元與報名頁區塊 —— 那些各自有自己的儲存鈕，請先按完再按這一顆。"}
       </p>
     </div>
   );

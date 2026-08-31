@@ -128,6 +128,10 @@ export default async function AdminProductEditPage({
       新增時的任務跟編輯不一樣：這裡要先把「這門課是什麼」建立起來，
       內容可以之後再慢慢填。所以設定排在最前面（而且它才有必填欄位），
       圖片與標題跟著，其餘區段等有了 id 再出現。
+
+      ⚠️ 這一條是 product-form.tsx 檔頭那句「所有欄位一定要屬於同一張表單」
+         的唯一例外，而且只在這裡成立：新增走的是 insert，沒送出的欄位是
+         「還沒有值」不是「被清空」。編輯既有課程時少一個欄位就是資料流失。
     */
     return (
       <div className="flex flex-col gap-6">
@@ -237,8 +241,16 @@ export default async function AdminProductEditPage({
   */
   const workshopOnlyIsDead = product.type === "course";
 
-  // 區段編號：連號產生，被條件隱藏的區段不會留下斷號。
-  // server component 只 render 一次，JSX 由上到下求值，所以計數是穩定的。
+  /*
+    區段編號：連號產生，被條件隱藏的區段不會留下斷號。
+
+    🔴 nextStep() 必須在**畫面上的那個位置**才被呼叫到。
+       JSX 建立元素時 props 就地求值 —— 所以
+         const someSection = (<X step={nextStep()} />)   // 這一行就領走號碼了
+       會讓號碼照「原始碼出現順序」發放，而不是「畫面顯示順序」。
+       曾經因此讓整頁從第 10 段開始。要延後求值就寫成函式（見下面的
+       renderWorkshopOnly），由使用它的那個位置呼叫。
+  */
   let stepCounter = 0;
   const nextStep = () => String(++stepCounter);
 
@@ -247,7 +259,12 @@ export default async function AdminProductEditPage({
       ? `/workshops/${product.slug}`
       : `/courses/${product.slug}`;
 
-  const workshopOnlySections = (
+  /*
+    ⚠️ 這裡一定要是函式不是常數 —— 常數會在 return 之前就把裡面的
+       nextStep() 全部跑完（見上面的說明）。呼叫點在下面的三元運算子，
+       那才是這些區段在畫面上的位置。
+  */
+  const renderWorkshopOnly = () => (
     <>
       <ProductAudienceSection product={product} step={nextStep()} />
 
@@ -436,10 +453,10 @@ export default async function AdminProductEditPage({
             所以客人看不到。工作坊則會照常顯示。
             線上課程頁的講師介紹與常見問題目前是寫死在程式裡的，改這裡或網站設定都不會變動。
           </p>
-          <div className="mt-4 flex flex-col gap-6">{workshopOnlySections}</div>
+          <div className="mt-4 flex flex-col gap-6">{renderWorkshopOnly()}</div>
         </details>
       ) : (
-        workshopOnlySections
+        renderWorkshopOnly()
       )}
 
       <ProductSettingsSection product={product} step={nextStep()} />

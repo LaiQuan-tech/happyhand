@@ -125,7 +125,15 @@ export function SingleImageField({
         >
           {url ? (
             isMediaUrl(url) ? (
-              <Image src={url} alt="" fill sizes="224px" className="object-cover" />
+              /* sizes 要跟上面的框寬一致，不然 Next 會挑錯尺寸的圖塞進框裡 ——
+                 這一格的用途正是「看得出字會不會被切」，糊掉就沒意義了。 */
+              <Image
+                src={url}
+                alt=""
+                fill
+                sizes="(min-width: 1024px) 420px, 100vw"
+                className="object-cover"
+              />
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element -- 非本站 bucket 的網址
                  不在 next.config.ts 的 remotePatterns 內，交給 <Image> 會直接丟錯、
