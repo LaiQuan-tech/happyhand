@@ -25,7 +25,12 @@ const FIELD_ORDER: FieldKey[] = ["name", "phone", "email", "address"];
 const PHONE_RE = /^09\d{8}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function CheckoutView() {
+export function CheckoutView({
+  /** 線上刷卡有沒有真的接好（由 server 端的 isBlackcatConfigured() 算出來） */
+  creditEnabled,
+}: {
+  creditEnabled: boolean;
+}) {
   const router = useRouter();
   const { items, total, ready, clear } = useCart();
 
@@ -521,7 +526,7 @@ export function CheckoutView() {
                 </div>
               )}
 
-              <PaymentOptions value={payment} onChange={setPayment} />
+              <PaymentOptions value={payment} onChange={setPayment} creditEnabled={creditEnabled} />
 
         <InvoiceOptions value={invoice} onChange={setInvoice} showErrors={submitted} />
             </div>

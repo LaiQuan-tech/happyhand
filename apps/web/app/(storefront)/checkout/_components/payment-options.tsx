@@ -11,12 +11,18 @@ type Option = {
   desc: string;
 };
 
-/** 設計稿 665–677（桌機）／739–751（手機） */
+/**
+ * 設計稿 665–677（桌機）／739–751（手機）
+ *
+ * ⚠️ 信用卡那一項的說明由 creditEnabled 決定，所以 desc 留空：實際串的是黑貓 PAY
+ *    （統一客樂得多元支付平台，收單行統一金流 PAYUNi），不是綠界。
+ *    這裡曾經寫「會轉到綠界安全付款頁」，那是改版前留下的舊文案。
+ */
 const OPTIONS: Option[] = [
   {
     value: "credit",
     label: "信用卡",
-    desc: "下一步會轉到綠界安全付款頁",
+    desc: "",  // 由 creditDesc 依實際狀態決定
   },
   {
     value: "atm",
@@ -38,9 +44,16 @@ const OPTIONS: Option[] = [
 export function PaymentOptions({
   value,
   onChange,
+  creditEnabled,
 }: {
   value: PaymentMethod;
   onChange: (v: PaymentMethod) => void;
+  /**
+   * 🔴 這個值必須來自 server 的 isBlackcatConfigured() ——
+   *    跟 api/orders/route.ts 決定「要不要真的去開刷卡單」是同一個判斷。
+   *    文案寫死的話會出現「畫面說不扣款、實際跳出刷卡頁」。
+   */
+  creditEnabled: boolean;
 }) {
   return (
     <fieldset className="mt-[40px] m-0 border-0 p-0">
@@ -82,7 +95,11 @@ export function PaymentOptions({
                       {opt.label}
                     </span>
                     <span className="mt-[4px] block text-[16px] leading-[1.8] text-brown-500">
-                      {opt.desc}
+                      {opt.value === "credit"
+                        ? creditEnabled
+                          ? "下一步會轉到黑貓 PAY 的安全刷卡頁"
+                          : "線上刷卡還在開通中，我們會用 LINE 跟你確認"
+                        : opt.desc}
                     </span>
                   </span>
                 </span>
@@ -91,7 +108,11 @@ export function PaymentOptions({
               {/* 展開說明放在 label 外面：裡面有 LINE 按鈕，包進 label 會誤觸選取 */}
               {selected && opt.value === "credit" && (
                 <PanelBox>
-                  <p>{"線上刷卡還在開通中。你按下送出之後我們會先幫你保留名額，並用 LINE 跟你確認付款方式，這時候還不會扣款。"}</p>
+                  <p>
+                    {creditEnabled
+                      ? "按下送出之後會轉到黑貓 PAY 的刷卡頁（統一客樂得的付款平台），在那裡輸入卡號完成付款。刷卡成功就會自動開通課程，發票也會寄到你填的 Email。"
+                      : "線上刷卡還在開通中。你按下送出之後我們會先幫你保留名額，並用 LINE 跟你確認付款方式，這時候還不會扣款。"}
+                  </p>
                 </PanelBox>
               )}
 

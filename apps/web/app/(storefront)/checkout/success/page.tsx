@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LinkButton, buttonClass } from "@/components/ui/button";
 import { SITE } from "@/lib/site";
+import { isBlackcatConfigured } from "@/lib/payment/blackcat";
 import { CheckoutSteps } from "@/app/(storefront)/checkout/_components/checkout-steps";
 
 export const metadata: Metadata = {
@@ -15,12 +16,33 @@ function one(v: string | string[] | undefined) {
   return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 }
 
-/** 付款方式對應的下一步說明。刻意不寫「付款成功」——目前一律是待確認的訂單。 */
+/**
+ * 付款方式對應的下一步說明。
+ *
+ * 🔴 信用卡那一段依 isBlackcatConfigured() 分兩種說法。
+ *    這裡曾經寫死「線上刷卡還在開通中…還沒有跟你收款」，但只要環境變數有值，
+ *    客人其實剛剛已經在黑貓 PAY 的刷卡頁上輸入過卡號了 —— 那句話會讓他以為
+ *    自己沒被扣款。文案與行為不同步在結帳流程上是會變成客訴的。
+ */
+function paymentNote(method: string, creditEnabled: boolean) {
+  if (method === "credit") {
+    return creditEnabled
+      ? {
+          title: "關於信用卡付款",
+          body:
+            "刷卡結果會由黑貓 PAY 通知我們，通常幾秒內就會完成。" +
+            "課程開通與電子發票都會自動處理，通知信會寄到你填的 Email。" +
+            "如果過了十分鐘還沒收到，用 LINE 跟我們說一聲。",
+        }
+      : {
+          title: "關於信用卡付款",
+          body: "線上刷卡還在開通中，所以我們會用 LINE 跟你確認付款方式。現在還沒有跟你收款，請放心。",
+        };
+  }
+  return PAYMENT_NOTE[method];
+}
+
 const PAYMENT_NOTE: Record<string, { title: string; body: string }> = {
-  credit: {
-    title: "關於信用卡付款",
-    body: "線上刷卡還在開通中，所以我們會用 LINE 跟你確認付款方式。現在還沒有跟你收款，請放心。",
-  },
   atm: {
     title: "關於 ATM 匯款",
     body: `匯款帳號請用 LINE 跟我們拿，戶名是${SITE.company}。匯款後我們對帳完成就會開通，大約 1 個工作天。`,
@@ -43,7 +65,7 @@ export default async function CheckoutSuccessPage({
 }) {
   const sp = await searchParams;
   const orderNo = one(sp.order);
-  const note = PAYMENT_NOTE[one(sp.pay)] ?? null;
+  const note = paymentNote(one(sp.pay), isBlackcatConfigured()) ?? null;
 
   return (
     <div>

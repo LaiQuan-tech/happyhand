@@ -349,7 +349,17 @@ Supabase 的 Email Template 已改成 `{{ .SiteURL }}/auth/confirm?token_hash={{
 
 ## 尚未完成
 
-- **金流**：綠界 ECPay 尚未串接（缺商店代號／HashKey／HashIV）。目前結帳會建立 `pending` 訂單，由客服用 LINE 確認。
+- **金流**：已串**黑貓 PAY**（統一客樂得多元支付平台，系統商禹動科技，收單行統一金流 PAYUNi），
+  不是綠界。程式在 `apps/web/lib/payment/blackcat.ts`＋`app/api/payments/blackcat/{apn,return}`。
+  環境變數 `BLACKCAT_CUST_ID` / `BLACKCAT_API_PASSWORD` 都有值時才會真的開刷卡單，
+  否則結帳會建立 `pending` 訂單由客服用 LINE 確認（前台文案會跟著換，見 `checkout/page.tsx`）。
+  ⚠️ **真實刷卡從未端到端測過** —— 資料庫裡沒有任何一筆帶 `payment_trade_no` 的訂單。
+  ⚠️ 退款／取消授權**尚未實作**，後台的「標記為已退款」只改資料庫狀態，不會通知黑貓 PAY。
+  ⚠️ 代收代付（ibon／ATM 虛擬帳號）帳號已開通但**沒有串**，目前 ATM 是純人工對帳。
+- **電子發票**：已串 **Amego**（光貿電子發票加值中心），賣方好日子股份有限公司／統編 53912857。
+  程式在 `apps/web/lib/invoice/`，開票掛在付款成功（APN）與後台標記收款兩條路徑上。
+  🔴 **目前開不出來**：Amego 後台設了 API 來源 IP 白名單（4 個固定 IP），而 Vercel 的出口 IP
+  是浮動的，每次呼叫都會被回 `code 14 IP 錯誤`。要請光貿客服移除白名單才能運作。
 - **第三方登入**：LINE 與 Google 登入尚未啟用，需要外部憑證（見下方「學員會員中心」）。
 - **影片內容**：`course_lessons.youtube_id` 目前全是空的，後台填入 YouTube 網址就會上線。
 - **素材**：設計稿中的斜紋色塊都是圖片佔位，等客戶提供照片（清單見 `design_handoff_happyhands/README.md` §8）。

@@ -14,7 +14,7 @@
 | DB / Auth / Storage | **Supabase**（Postgres + Row Level Security + Auth + Storage） | 會員、訂單、影片權限一次到位 |
 | 影片 | Supabase Storage 私有 bucket + 簽名 URL（或 Mux／Cloudflare Stream） | 需擋未購買者；簽名 URL 有效期 2 小時 |
 | 背景服務 | **Railway** | 見 §4 |
-| 金流 | 台灣建議綠界 ECPay 或藍新 NewebPay（信用卡＋ATM 虛擬帳號） | 客群習慣 ATM 匯款 |
+| 金流 | ~~台灣建議綠界 ECPay 或藍新 NewebPay~~ → **實際採用黑貓 PAY**（統一客樂得多元支付平台） | 客群習慣 ATM 匯款。⚠️ 這一列是設計階段的建議，實作時改用黑貓 PAY，見根 README「尚未完成」 |
 | 通知 | Email（Resend）＋ LINE Notify／LINE OA | 長輩多用 LINE |
 
 ## 2. Repo 結構
