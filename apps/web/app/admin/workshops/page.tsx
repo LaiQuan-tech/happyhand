@@ -71,6 +71,15 @@ type WorkshopRow = {
   price: number;
   is_published: boolean;
   sessions: SessionRow[];
+  /**
+   * 被「只看未結束的」濾掉的場次數。
+   *
+   * 🔴 收錄判斷用的是**全部**場次，篩選只影響顯示 —— 一門線上課的唯一一場
+   *    已經結束時，它仍然要出現在這一頁（場次與報名名單都還在資料庫裡）。
+   *    但那時候場次清單會是空的，如果不說「有 N 場已結束」，畫面看起來就像
+   *    「這門課從來沒排過場次」。
+   */
+  hiddenPast: number;
 };
 
 export default async function AdminWorkshopsPage({
@@ -178,6 +187,7 @@ export default async function AdminWorkshopsPage({
           price: raw.price,
           is_published: raw.is_published,
           sessions,
+          hiddenPast: all.length - sessions.length,
           // 判斷用的是「全部場次」不是篩選後的，見下面的 filter
           hasAnySession: all.length > 0,
         };
@@ -202,6 +212,7 @@ export default async function AdminWorkshopsPage({
         price: r.price,
         is_published: r.is_published,
         sessions: r.sessions,
+        hiddenPast: r.hiddenPast,
       }));
   } catch (err) {
     console.error("[admin/workshops] 讀取清單失敗", err);
@@ -357,9 +368,11 @@ function WorkshopCard({
           href={canViewRoster ? (s) => `/admin/sessions/${s.id}` : undefined}
           caption={`${row.title} 的場次`}
           empty={
-            canEdit
-              ? "這門工作坊還沒有場次。到「編輯內容」的「場次與報名」那一段新增。"
-              : "這門工作坊目前沒有場次。"
+            row.hiddenPast > 0
+              ? `這門課的 ${row.hiddenPast} 場都已經結束了。勾選上面的「顯示已結束的場次」就看得到。`
+              : canEdit
+                ? "這門工作坊還沒有場次。到「編輯內容」的「場次與報名」那一段新增。"
+                : "這門工作坊目前沒有場次。"
           }
           columns={[
             {
