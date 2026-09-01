@@ -101,7 +101,25 @@ export async function refundOrder(orderId: string): Promise<OrderActionResult> {
     return { error: `這筆訂單目前是「${ORDER_STATUS_LABELS[order.status as OrderStatus] ?? order.status}」，不能退款。` };
   }
 
-  const viaGateway = order.payment_provider === "blackcat" && Boolean(order.payment_trade_no);
+  /*
+    這筆該不該呼叫金流退款。
+
+    🔴 這裡原本還多要求 `Boolean(order.payment_trade_no)`，那是個會靜默吃掉錢的條件：
+       payment_trade_no 只有 APN 進來時才會寫。線上刷卡但 APN 沒收到（掉封包、
+       或當初就卡在下面幾個 bug 上），客服手動把訂單標成已收款之後，
+       這筆的 payment_trade_no 是 null —— 於是 viaGateway 是 false，
+       流程直接掉到最下面那行 transitionOrder(refunded)：
+       訂單顯示「已退款」、稽核也寫了、但**系統從頭到尾沒有向黑貓 PAY 送出任何指令**，
+       客人的錢一毛都沒回去，而且畫面上沒有任何地方看得出來。
+
+       而且 reverseCharge() 根本用不到 trans_id —— 它是用 cust_order_no（= order_no）
+       去查、去退的。這個條件沒有帶來任何保護，只有壞處。
+
+    payment_provider 是建單拿到付款網址時就寫的，所以「有沒有走過線上刷卡」
+    看它才對。真的沒授權成功的話，reverseCharge() 內部回查會擋下來並回一個
+    看得懂的錯誤，不會亂退。
+  */
+  const viaGateway = order.payment_provider === "blackcat";
 
   if (viaGateway) {
     if (!canReverseCharge()) {
@@ -141,7 +159,8 @@ export async function refundOrder(orderId: string): Promise<OrderActionResult> {
     return out.error ? out : { error: null, ok: res.note };
   }
 
-  // 人工收款的訂單：本來就沒有金流可以呼叫。
+  // 人工收款的訂單（ATM、LINE 代訂）：本來就沒有金流可以呼叫，
+  // 錢要客服自己匯回去。這裡只負責改狀態、放掉工作坊席次。
   return transitionOrder(orderId, "refunded");
 }
 

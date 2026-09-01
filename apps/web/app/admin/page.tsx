@@ -92,7 +92,10 @@ export default async function AdminDashboardPage() {
           就要等客人打 LINE 來罵才會發現。沒有異常時整塊不渲染，
           免得變成永遠都在的裝飾品而被忽略。 */}
       {health &&
-        (health.unfulfilled > 0 || health.failedEmails > 0 || health.stuckInvoices > 0) && (
+        (health.unfulfilled > 0 ||
+          health.failedEmails > 0 ||
+          health.stuckInvoices > 0 ||
+          health.paymentAlerts > 0) && (
         <section className="rounded-card border border-danger bg-paper p-4 admin:p-5">
           <h2 className="text-[16px] font-medium text-danger">需要處理</h2>
           <ul className="mt-2 flex flex-col gap-2 text-[14px] leading-relaxed text-ink">
@@ -106,6 +109,17 @@ export default async function AdminDashboardPage() {
                 >
                   去處理
                 </Link>
+              </li>
+            )}
+            {health.paymentAlerts > 0 && (
+              <li>
+                有 <strong className="text-danger">{health.paymentAlerts}</strong>{" "}
+                筆線上刷卡的付款通知<strong className="text-danger">沒能處理完</strong>
+                —— 金額對不上、回查不到、處理到一半中斷，
+                或是授權已經被取消但訂單還掛在「已收款」。
+                前幾種是客人可能扣了錢卻沒拿到課；最後一種相反，是錢已經退回去了
+                但席次與課程權限還佔著。兩種都要一筆一筆對，
+                請開黑貓 PAY 後台的交易明細比對訂單編號。
               </li>
             )}
             {health.failedEmails > 0 && (
@@ -129,6 +143,24 @@ export default async function AdminDashboardPage() {
               </li>
             )}
           </ul>
+        </section>
+      )}
+
+      {/*
+        「開通了但金額沒核對過」刻意跟上面那塊分開，而且不是紅的。
+        客人沒有受影響（課已經開了），差別只在我們少了一個能證明金額正確的欄位 ——
+        混進「需要處理」會稀釋掉那一塊的意義，讓真正掉單的那幾筆被當成雜訊滑過去。
+      */}
+      {health && health.paymentUnverified > 0 && (
+        <section className="rounded-card border border-line bg-panel p-4 admin:p-5">
+          <p className="text-[14px] leading-relaxed text-ink-soft">
+            近 30 天有 <span className="font-medium text-ink">{health.paymentUnverified}</span>{" "}
+            筆線上刷卡已開通，但系統
+            <span className="font-medium text-ink">沒有核對過金額</span>
+            —— 黑貓 PAY 的回應裡找不到可用的實收金額欄位（規格只寫了代收代付用的
+            pay_amount）。課程與席次都正常，對帳時請用黑貓 PAY 後台的交易明細
+            比對一次金額。這個數字要歸零需要工程師依實際回應補上欄位名。
+          </p>
         </section>
       )}
 
@@ -275,23 +307,31 @@ async function loadOrderStats(db: Db | null) {
  * 查不到就當作沒事，總覽的其他部分照常運作。失敗會進 log。
  */
 async function loadHealthStats(db: Db | null) {
-  const empty = { unfulfilled: 0, failedEmails: 0, stuckInvoices: 0 };
+  const empty = {
+    unfulfilled: 0,
+    failedEmails: 0,
+    stuckInvoices: 0,
+    paymentAlerts: 0,
+    paymentUnverified: 0,
+  };
   if (!db) return empty;
 
   try {
-    const [unfulfilled, failed, invoices] = await Promise.all([
+    const [unfulfilled, failed, invoices, payments, unverified] = await Promise.all([
       db.rpc("count_unfulfilled_paid_orders"),
       db
         .from("email_outbox")
         .select("id", { count: "exact", head: true })
         .eq("status", "failed"),
-      /*
-        發票異常。
-        ⚠️ 這一行的存在本身就是重點：payment 那邊也有一支 count_payment_alerts()，
-           寫好了卻**沒有任何畫面呼叫它**，所以「客人付了錢但金額對不上」這件事
-           至今沒有任何人看得到。不要讓發票重蹈覆轍。
-      */
       db.rpc("count_invoice_alerts"),
+      /*
+        付款異常。
+        ⚠️ count_payment_alerts() 從 20260817 就寫好了，但**沒有任何畫面呼叫它**，
+           所以「收到付款通知卻沒能把課開出去」這件事一直沒有人看得到 ——
+           而那正好是 APN 那幾個 bug 掉單時會留下的痕跡。這一行就是補上這個缺口。
+      */
+      db.rpc("count_payment_alerts"),
+      db.rpc("count_payment_unverified"),
     ]);
 
     if (unfulfilled.error) {
@@ -303,6 +343,12 @@ async function loadHealthStats(db: Db | null) {
 
     if (invoices.error) {
       console.error("[admin] 發票異常查詢失敗", invoices.error.message);
+    }
+    if (payments.error) {
+      console.error("[admin] 付款異常查詢失敗", payments.error.message);
+    }
+    if (unverified.error) {
+      console.error("[admin] 未核對金額查詢失敗", unverified.error.message);
     }
 
     // RPC 回的是一列三個計數。三種都是「客人拿不到發票」，加總成一個數字就好 ——
@@ -318,6 +364,8 @@ async function loadHealthStats(db: Db | null) {
         Number(invRow?.pending_overdue ?? 0) +
         Number(invRow?.stuck_issuing ?? 0) +
         Number(invRow?.exhausted ?? 0),
+      paymentAlerts: typeof payments.data === "number" ? payments.data : 0,
+      paymentUnverified: typeof unverified.data === "number" ? unverified.data : 0,
     };
   } catch (err) {
     console.error("[admin] 健康度統計查詢失敗", err);

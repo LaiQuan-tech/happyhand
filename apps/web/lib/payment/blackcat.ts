@@ -263,8 +263,71 @@ export async function createCreditOrder(
 // ---------------------------------------------------------------------------
 
 export type QueryOrderResult =
-  | { ok: true; data: Record<string, unknown> }
+  | {
+      ok: true;
+      /** 已經拆過殼的欄位（見 unwrapQueryData）。呼叫端一律讀這個。 */
+      data: Record<string, unknown>;
+      /** 原始回應，整包留著寫進 payment_events 用。 */
+      raw: Record<string, unknown>;
+    }
   | { ok: false; reason: string };
+
+/**
+ * CocsOrderQuery 的回應形狀。
+ *
+ * 🔴 規格範例出現過兩種形狀（欄位直接放頂層／包在 data 裡），而我們手上還沒有
+ *    一筆真實回應可以確定是哪一種。這件事本來是兩個呼叫端各自解讀的：
+ *    reverseCharge() 寫了 `q.data.data ?? q.data` 的 fallback，APN 沒有。
+ *    也就是說如果實際是「包起來」的那種，APN 會 100% 讀到 undefined、
+ *    判成「未授權」、然後回 OK 停止重送 —— 每一筆線上刷卡都會被靜靜丟掉。
+ *
+ *    所以拆殼收斂到 queryOrder() 裡面做一次，呼叫端拿到的 data 永遠是拆好的，
+ *    兩邊不可能再各說各話。
+ */
+function unwrapQueryData(json: Record<string, unknown>): Record<string, unknown> {
+  const inner = json.data;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return inner as Record<string, unknown>;
+  }
+  return json;
+}
+
+/**
+ * 這筆交易「實際被授權／實際收到」多少錢。讀不到就回 null。
+ *
+ * 🔴 這支**絕對不可以**回退到 order_amount。
+ *    order_amount 是我們自己在 CocsOrderAppend 送出去的數字，回查只是原樣念回來，
+ *    永遠等於 orders.total。拿它跟 orders.total 比是恆真式 ——
+ *    看起來在防、實際上什麼都沒擋，正好抵消掉規格 P35 紅字那條規則存在的理由。
+ *    （這就是這支函式被拆出來的原因，不要為了「少一個 null 分支」把它加回去。）
+ *
+ * ⚠️ 欄位名只有 pay_amount 是規格明寫的，其餘是合理猜測。猜不到就回 null，
+ *    由呼叫端記成「這筆沒驗過金額」而不是假裝驗過了 ——
+ *    第一筆真實交易的 payment_events.raw 裡會有完整回應，那時再把名字改對。
+ */
+const PAID_AMOUNT_FIELDS = [
+  "pay_amount", // 規格 P35 明寫的實際繳款金額
+  "auth_amount",
+  "authorized_amount",
+  "trade_amount",
+] as const;
+
+export function extractPaidAmount(
+  ...sources: (Record<string, unknown> | null | undefined)[]
+): number | null {
+  for (const src of sources) {
+    if (!src) continue;
+    for (const key of PAID_AMOUNT_FIELDS) {
+      const v = src[key];
+      if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+      if (typeof v === "string" && v.trim() !== "") {
+        const n = Number(v.trim().replace(/[",']/g, ""));
+        if (Number.isFinite(n)) return Math.trunc(n);
+      }
+    }
+  }
+  return null;
+}
 
 /** 訂單查詢（cmd = CocsOrderQuery）。對帳與補救用。 */
 export async function queryOrder(orderNo: string): Promise<QueryOrderResult> {
@@ -297,7 +360,7 @@ export async function queryOrder(orderNo: string): Promise<QueryOrderResult> {
     if (json.status !== "OK") {
       return { ok: false, reason: String(json.msg ?? `HTTP ${res.status}`) };
     }
-    return { ok: true, data: json };
+    return { ok: true, data: unwrapQueryData(json), raw: json };
   } catch (error) {
     return { ok: false, reason: (error as Error).message };
   }
@@ -407,8 +470,8 @@ export async function reverseCharge(
     return { ok: false, reason: `查不到這筆交易的狀態（${q.reason}）`, canRetryLater: true };
   }
 
-  const raw = (q.data.data ?? q.data) as Record<string, unknown>;
-  const processCode = Number(raw.process_code);
+  // queryOrder() 已經拆過殼了，這裡不要再自己 fallback 一次。
+  const processCode = Number(q.data.process_code);
 
   if (!Number.isFinite(processCode)) {
     return { ok: false, reason: "查詢回應裡沒有 process_code。", canRetryLater: true };
