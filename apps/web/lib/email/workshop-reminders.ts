@@ -18,11 +18,14 @@ import { twDate, timeRange } from "@/lib/data";
  *    （它自己的檔頭第 9 行就註明「process 重啟後會重寄」）。serverless 每次
  *    invocation 都是新 process，照搬等於每天重寄同一封。這裡改用
  *    `email_outbox.dedupe_key` 的 unique 約束當冪等保證，key 是
- *    `workshop_reminder:<stage>:<session>:<email>`，跨 process、跨部署都有效。
+ *    `workshop_reminder:<stage>:<session>:<starts_at>:<email>`，跨 process、
+ *    跨部署都有效；帶 starts_at 是為了讓場次改期後會重新提醒一次。
  *
  * 另外兩個差異：
  * ・**視窗放寬成兩天**（見 STAGES）。Vercel Hobby 一天只能跑一次 cron，漏跑一天
  *   就永遠補不回來；放寬之後隔天會補上，而重複由 dedupe_key 擋掉。
+ *   ⚠️ 代價是 d3 可能在 D-2 才第一次命中，所以信裡的天數用 daysUntil() 實算，
+ *   不能用 stage 推 —— 否則會寄出主旨寫「三天後」但其實是後天的信。
  * ・**沒有 auth.users email 回退**。worker 版會在 contact_email 為空時去查
  *   auth 帳號，這裡只用 contact_email，查不到的計入 `withoutEmail` 讓人工處理
  *   （多半是 LINE 代訂的長輩客人，本來就要打電話）。
@@ -56,6 +59,13 @@ function taipeiDayStart(daysAhead: number, now: Date): Date {
   );
 }
 
+/** 從 now 到場次開始，差幾個台北日曆日。用來決定信裡寫「明天」還是「三天後」。 */
+function daysUntil(startsAt: string, now: Date): number {
+  const day = (d: Date) =>
+    Math.floor((d.getTime() + TAIPEI_OFFSET_MS) / 86_400_000);
+  return day(new Date(startsAt)) - day(now);
+}
+
 /** 「9月12日（週六）09:30–17:00」 */
 function formatWhen(startsAt: string, endsAt: string): string {
   const { month, day, weekday } = twDate(startsAt);
@@ -87,12 +97,18 @@ export type ReminderResult = {
   dryRun: boolean;
   stages: Record<
     ReminderStage,
-    { sessions: number; queued: number; duplicate: number; withoutEmail: number }
+    {
+      sessions: number;
+      queued: number;
+      duplicate: number;
+      failed: number;
+      withoutEmail: number;
+    }
   >;
   error?: string;
 };
 
-const EMPTY = { sessions: 0, queued: 0, duplicate: 0, withoutEmail: 0 };
+const EMPTY = { sessions: 0, queued: 0, duplicate: 0, failed: 0, withoutEmail: 0 };
 
 /**
  * 掃出該提醒的場次並把信排進 outbox。
@@ -111,9 +127,12 @@ export async function sendWorkshopReminders(opts?: {
     stages: { d3: { ...EMPTY }, d1: { ...EMPTY } },
   };
 
-  const db = createServiceClient();
-  if (!db) {
-    result.error = "沒有 service role key";
+  // ⚠️ createServiceClient() 缺 key 時是 throw 不是回 null，所以要接。
+  let db: ReturnType<typeof createServiceClient>;
+  try {
+    db = createServiceClient();
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
     return result;
   }
 
@@ -184,12 +203,17 @@ export async function sendWorkshopReminders(opts?: {
         continue;
       }
 
+      /*
+        dedupe key 帶上 starts_at：場次改期之後應該要**重新**提醒一次。
+        不帶的話 key 不變 → 被當成重複 → 客人手上只有一封寫著舊日期的信。
+      */
+      const dedupeKey = `workshop_reminder:${stage}:${session.id}:${session.starts_at}:${email.toLowerCase()}`;
       const queued = await enqueueEmail({
-        dedupeKey: `workshop_reminder:${stage}:${key}`,
+        dedupeKey,
         ...workshopReminderEmail({
           to: email,
           name: order.contact_name?.trim() || "同學",
-          stage,
+          daysAhead: daysUntil(session.starts_at, now),
           title: session.products?.title ?? "快樂手工作坊",
           when: formatWhen(session.starts_at, session.ends_at),
           location: session.location,
@@ -198,8 +222,32 @@ export async function sendWorkshopReminders(opts?: {
         }),
       });
 
-      if (queued) tally.queued += 1;
-      else tally.duplicate += 1;
+      if (queued) {
+        tally.queued += 1;
+        continue;
+      }
+
+      /*
+        🔴 enqueueEmail 對「重複」與「資料庫錯誤」都回 false。全部記成 duplicate
+        的話，排入失敗會長得跟正常去重一模一樣 —— 而 d1 只有 D-1 一次機會，
+        那位客人的提醒就永久消失且監控上無跡可循。回頭查一次 key 在不在來分辨。
+      */
+      const { data: existing, error: checkError } = await db
+        .from("email_outbox")
+        .select("id")
+        .eq("dedupe_key", dedupeKey)
+        .maybeSingle();
+
+      if (!checkError && existing) {
+        tally.duplicate += 1;
+      } else {
+        tally.failed += 1;
+        console.error(
+          "[reminders] 🔴 排入 outbox 失敗，這位客人不會收到提醒",
+          stage,
+          order.order_no,
+        );
+      }
     }
   }
 

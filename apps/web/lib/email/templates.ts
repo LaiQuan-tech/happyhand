@@ -70,8 +70,13 @@ function layout(bodyHtml: string): string {
       <p style="margin:0 0 10px;font-size:15px;line-height:1.8;color:${SOFT};">
         有任何問題，<a href="${SITE.lineHref}" style="color:${CARAMEL};font-weight:bold;">用 LINE 問我們</a>就可以，報一下你的名字就好。
       </p>
-      <p style="margin:0;font-size:13px;line-height:1.7;color:${SOFT};">
+      <p style="margin:0 0 10px;font-size:13px;line-height:1.7;color:${SOFT};">
         ${escapeHtml(SITE.company)}・LINE ${escapeHtml(SITE.lineId)}<br>${escapeHtml(SITE.address)}
+      </p>
+      <!-- 免責聲明。README §348 要求所有頁尾都要有，信件是會被截圖轉發的載體，
+           而提醒信裡就有「膝蓋或腰不舒服」這種身體相關的說明。 -->
+      <p style="margin:0;font-size:13px;line-height:1.7;color:${SOFT};">
+        ${escapeHtml(SITE.disclaimer)}
       </p>
     </td></tr>
   </table>
@@ -88,7 +93,9 @@ ${SITE.lineHref}
 
 ${SITE.company}
 LINE ${SITE.lineId}
-${SITE.address}`;
+${SITE.address}
+
+${SITE.disclaimer}`;
 }
 
 /* ------------------------------------------------------------------ 訂單成立 */
@@ -175,6 +182,21 @@ ${nextStep}
 /* ------------------------------------------------------------ 開課提醒 */
 
 /**
+ * 距開課天數 → 中文說法。兩套刻意分開：
+ *   DAY_WORD  用在主旨（「後天見」）
+ *   COUNT_WORD 用在句子裡的時間長度（「再過兩天」）
+ * 混用會寫出「再過後天」這種句子。
+ */
+const DAY_WORD: Record<number, string> = {
+  0: "今天",
+  1: "明天",
+  2: "後天",
+  3: "三天後",
+  4: "四天後",
+};
+const COUNT_WORD: Record<number, string> = { 2: "兩", 3: "三", 4: "四" };
+
+/**
  * 開課提醒信。原型是 apps/worker 的 workshop-reminders job，搬進 web 端時改了兩處：
  *
  * 1. **不放電話。** worker 版寫死 02-2833-5820，但 lib/site.ts 已經明訂
@@ -187,21 +209,26 @@ ${nextStep}
 export function workshopReminderEmail(input: {
   to: string;
   name: string;
-  stage: "d3" | "d1";
+  /**
+   * 距離開課還有幾天（台北日曆日差）。
+   *
+   * 🔴 用實際天數決定文案，不要用 stage。d3 這個階段的掃描視窗刻意吃兩天
+   *    （補 cron 漏跑），所以它可能在 D-2 才第一次命中某場次 —— 那時候寫
+   *    「再過三天」就是騙人。客人在開課前兩三天才報名在小班制是常態。
+   */
+  daysAhead: number;
   title: string;
   when: string;
   location: string | null;
   address: string | null;
   orderNo: string;
 }): EmailMessage {
-  const subject =
-    input.stage === "d3"
-      ? `三天後見：${input.title}`
-      : `明天見：${input.title}`;
+  const days = Math.max(0, input.daysAhead);
+  const subject = `${DAY_WORD[days] ?? `${days} 天後`}見：${input.title}`;
   const opening =
-    input.stage === "d3"
-      ? "再過三天就要上課了，先把時間和地點提醒你一次。"
-      : "明天就是上課的日子了，這封信提醒你時間和地點。";
+    days <= 1
+      ? `${days === 0 ? "今天" : "明天"}就是上課的日子了，這封信提醒你時間和地點。`
+      : `再過${COUNT_WORD[days] ?? days}天就要上課了，先把時間和地點提醒你一次。`;
 
   const rows: [string, string][] = [
     ["課程", input.title],
