@@ -3,8 +3,28 @@ import type { WorkshopRow } from "@/lib/data";
 import { SessionRow } from "@/app/(storefront)/workshops/_components/session-row";
 import { NoSessions } from "@/app/(storefront)/workshops/_components/no-sessions";
 
-/** 首頁最多列幾場。超過的收進 /workshops，不要讓首頁變成場次表。 */
+/** 首頁最多列幾個工作坊。超過的收進 /workshops，不要讓首頁變成場次表。 */
 const HOME_SESSION_LIMIT = 6;
+
+/**
+ * 同一個工作坊只留最近的一場。
+ *
+ * 一門工作坊開好幾梯是常態（root-memory 兩梯、26 道鎖三梯），首頁把每一梯
+ * 都列出來的話，同一個名字會連著出現兩三次，看起來像是資料重複而不是
+ * 「這門課有很多場可以挑」。挑場次是 /workshops 的事，首頁只負責讓人知道
+ * 有哪些工作坊、最近一場什麼時候。
+ *
+ * ⚠️ 依賴 getWorkshopSessions() 已經照 starts_at 由近到遠排序 —— 第一筆
+ * 就是最近的一場。那個排序改掉的話這裡會變成「留下任意一場」。
+ */
+function oneRowPerWorkshop(sessions: WorkshopRow[]): WorkshopRow[] {
+  const seen = new Set<string>();
+  return sessions.filter((s) => {
+    if (seen.has(s.slug)) return false;
+    seen.add(s.slug);
+    return true;
+  });
+}
 
 /**
  * 首頁的工作坊區塊。
@@ -18,8 +38,9 @@ const HOME_SESSION_LIMIT = 6;
  * 同一種東西在站上長得不一樣會讓人以為是兩件事，而且那個元件的
  * RWD 已經驗過（390px 無溢出、觸控區達標），另刻等於重新承擔一次風險。
  *
- * 只顯示最近幾場。首頁的任務是「讓人知道有實體課、下一場什麼時候」，
- * 不是把場次表搬過來——超過的用底下那顆按鈕帶去 /workshops。
+ * 一個工作坊只列一場（最近的那場），最多幾個由 HOME_SESSION_LIMIT 決定。
+ * 首頁的任務是「讓人知道有實體課、下一場什麼時候」，不是把場次表搬過來——
+ * 其餘梯次用底下那顆按鈕帶去 /workshops。
  */
 export function HomeWorkshops({
   sessions,
@@ -29,7 +50,9 @@ export function HomeWorkshops({
   /** 只有 type=workshop 的商品有單場詳情頁，其餘（例如讀脈入門課的實體班）標題不做連結 */
   workshopSlugs: Set<string>;
 }) {
-  const upcoming = sessions.slice(0, HOME_SESSION_LIMIT);
+  const upcoming = oneRowPerWorkshop(sessions).slice(0, HOME_SESSION_LIMIT);
+  // 比的是「全部場次」不是「全部工作坊」：被摺疊掉的梯次也在 /workshops 上，
+  // 所以就算工作坊全列完了，只要還有別的梯次，那顆按鈕就該出現。
   const more = sessions.length - upcoming.length;
 
   return (
