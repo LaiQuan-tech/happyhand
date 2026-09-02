@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct, getPublishedSlugs } from "@/lib/data";
+import {
+  getProduct,
+  getPublishedSlugs,
+  getSiteSetting,
+  type TeacherSetting,
+} from "@/lib/data";
 import { TEACHER, FAQS } from "@/lib/content";
 import { SITE, formatPrice } from "@/lib/site";
 import { Figure } from "@/components/ui/placeholder";
@@ -52,7 +57,17 @@ export default async function CourseDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProduct(slug);
+  /*
+    講師照放在 site_settings.teacher，不在 lib/content.ts 的靜態 TEACHER 裡。
+    這一頁原本只讀靜態常數，所以下面那個 <Figure> 從來沒拿到 src ——
+    資料庫裡明明有一張真的照片，這頁卻一直畫斜紋佔位圖。
+    文字仍沿用靜態 TEACHER（那是這一頁的既有行為，不在這次的範圍內），
+    只把照片接上。
+  */
+  const [product, teacher] = await Promise.all([
+    getProduct(slug),
+    getSiteSetting<TeacherSetting>("teacher"),
+  ]);
   if (!product) notFound();
 
   const lessons = product.lessons ?? [];
@@ -216,10 +231,14 @@ export default async function CourseDetailPage({
               >
                 <div className="grid grid-cols-[76px_1fr] items-start gap-[16px] md:grid-cols-[120px_1fr] md:items-center md:gap-[26px]">
                   <Figure
-                    alt={`${TEACHER.name} 照片`}
+                    src={teacher?.photo_url}
+                    alt={`${teacher?.name ?? TEACHER.name} 照片`}
                     rounded="rounded-full"
                     className="h-[76px] w-[76px] md:h-[120px] md:w-[120px]"
                     sizes="120px"
+                    // 講師照是 4:5 直式，放進圓形（等於方框）置中裁切會切掉頭頂。
+                    // 與 workshops/_components/content-sections.tsx 的講師區同樣處理。
+                    objectPosition="object-top"
                   />
                   <div>
                     <p className="t-eyebrow hidden text-caramel-ink md:block">
