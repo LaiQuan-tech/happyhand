@@ -5,7 +5,12 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { findOrCreateUser, generateSetupLink } from "@/lib/account/provision";
 import { enqueueEmail, flushOutbox } from "@/lib/email/outbox";
-import { accountSetupEmail, orderCreatedEmail } from "@/lib/email/templates";
+import {
+  accountSetupEmail,
+  orderCreatedEmail,
+  type EmailSessionInfo,
+} from "@/lib/email/templates";
+import { twDate, timeRange } from "@/lib/data";
 import { createCreditOrder, isBlackcatConfigured } from "@/lib/payment/blackcat";
 import {
   isCarrierType,
@@ -779,6 +784,55 @@ async function setupEmailQuotaLeft(): Promise<boolean> {
   }
 }
 
+/**
+ * 這些場次的上課時間與地點，給確認信用。
+ *
+ * 🔴 只認資料庫。購物車帶上來的 `session_label` 是客戶端字串，客人改得動，
+ *    而這封信是他唯一會收到的「哪天去哪裡」—— 寫錯就是白跑一趟。
+ *
+ * 查不到就回空 Map，信照寄（少了上課資訊總比整封不寄好）。這支跑在 after()
+ * 裡，任何失敗都不該影響已經成立的訂單。
+ */
+async function loadSessionDetails(
+  sessionIds: readonly string[],
+): Promise<Map<string, EmailSessionInfo>> {
+  const out = new Map<string, EmailSessionInfo>();
+  const wanted = [...new Set(sessionIds.filter(Boolean))];
+  if (wanted.length === 0) return out;
+
+  try {
+    const db = createServiceClient();
+    if (!db) return out;
+    const { data, error } = await db
+      .from("workshop_sessions")
+      .select("id,starts_at,ends_at,location,address")
+      .in("id", wanted);
+    if (error) {
+      console.error("[orders] 讀場次明細失敗，確認信將不含上課資訊", error.message);
+      return out;
+    }
+    for (const row of (data ?? []) as {
+      id: string;
+      starts_at: string;
+      ends_at: string;
+      location: string | null;
+      address: string | null;
+    }[]) {
+      const { month, day, weekday } = twDate(row.starts_at);
+      const m = month.replace(/\s+/g, "").replace(/月+$/, "月");
+      const d = day.replace(/日+$/, "");
+      out.set(row.id, {
+        when: `${m}${d}日（${weekday}）${timeRange(row.starts_at, row.ends_at)}`,
+        location: row.location,
+        address: row.address,
+      });
+    }
+  } catch (err) {
+    console.error("[orders] 讀場次明細例外", err);
+  }
+  return out;
+}
+
 async function queueOrderEmails(input: {
   orderId: string;
   order_no: string;
@@ -790,6 +844,9 @@ async function queueOrderEmails(input: {
   provisioned: Provisioned | null;
 }) {
   // 1. 訂單成立通知
+  const sessionInfo = await loadSessionDetails(
+    input.lines.flatMap((l) => (l.session_id ? [l.session_id] : [])),
+  );
   await enqueueEmail({
     dedupeKey: `order_created:${input.orderId}`,
     ...orderCreatedEmail({
@@ -798,7 +855,11 @@ async function queueOrderEmails(input: {
       orderNo: input.order_no,
       total: input.total,
       paymentMethod: input.payment_method,
-      items: input.lines.map((l) => ({ title: l.title, qty: l.qty })),
+      items: input.lines.map((l) => ({
+        title: l.title,
+        qty: l.qty,
+        session: l.session_id ? (sessionInfo.get(l.session_id) ?? null) : null,
+      })),
     }),
   });
 

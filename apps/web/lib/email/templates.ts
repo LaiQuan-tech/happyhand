@@ -99,17 +99,48 @@ const PAYMENT_NEXT_STEP: Record<string, string> = {
   manual: "這筆是請我們代訂的。我們會用 LINE 跟你確認課程與付款方式，你也可以直接用 LINE 找我們。",
 };
 
+/**
+ * 一筆工作坊品項的上課資訊。
+ *
+ * 🔴 一定要由伺服器端從 workshop_sessions 讀，不要用購物車帶上來的
+ *    session_label —— 那是客戶端字串，客人改得動，而這封信是客人唯一
+ *    會收到的「哪天去哪裡」。
+ */
+export type EmailSessionInfo = {
+  /** 已格式化的台北時間，例如「9月12日（週六）09:30–17:00」 */
+  when: string;
+  location: string | null;
+  address: string | null;
+};
+
 export function orderCreatedEmail(input: {
   to: string;
   name: string;
   orderNo: string;
   total: number;
   paymentMethod: string | null;
-  items: readonly { title: string; qty: number }[];
+  items: readonly { title: string; qty: number; session?: EmailSessionInfo | null }[];
 }): EmailMessage {
   const nextStep =
     PAYMENT_NEXT_STEP[input.paymentMethod ?? "manual"] ?? PAYMENT_NEXT_STEP["manual"]!;
   const itemLines = input.items.map((i) => `・${i.title}${i.qty > 1 ? ` ×${i.qty}` : ""}`);
+
+  // 實體場次的上課資訊。多堂就逐堂列，標題放前面才分得出是哪一堂。
+  const booked = input.items.flatMap((i) =>
+    i.session ? [{ title: i.title, session: i.session }] : [],
+  );
+  const multi = booked.length > 1;
+  const sessionRows: [string, string][] = booked.flatMap(({ title, session }) => {
+    const prefix = multi ? `${title}・` : "";
+    const rows: [string, string][] = [[`${prefix}上課時間`, session.when]];
+    if (session.location) rows.push([`${prefix}上課地點`, session.location]);
+    if (session.address) rows.push([`${prefix}地址`, session.address]);
+    return rows;
+  });
+  const sessionText =
+    sessionRows.length === 0
+      ? ""
+      : `\n${sessionRows.map(([k, v]) => `${k}：${v}`).join("\n")}\n`;
 
   const text = `${input.name} 你好，
 
@@ -118,7 +149,7 @@ export function orderCreatedEmail(input: {
 訂單編號：${input.orderNo}
 ${itemLines.join("\n")}
 金額：${formatPrice(input.total)}
-
+${sessionText}
 接下來
 ${nextStep}
 
@@ -131,6 +162,7 @@ ${nextStep}
       ["訂單編號", input.orderNo],
       ["購買內容", itemLines.join("\n").replaceAll("\n", "、").replaceAll("・", "")],
       ["金額", formatPrice(input.total)],
+      ...sessionRows,
     ])}
     <p style="margin:0 0 8px;font-size:18px;line-height:1.6;font-weight:bold;color:${INK};">接下來</p>
     ${paragraph(nextStep)}
@@ -138,6 +170,79 @@ ${nextStep}
   `);
 
   return { to: input.to, subject: `我們收到你的訂單了（${input.orderNo}）`, text, html };
+}
+
+/* ------------------------------------------------------------ 開課提醒 */
+
+/**
+ * 開課提醒信。原型是 apps/worker 的 workshop-reminders job，搬進 web 端時改了兩處：
+ *
+ * 1. **不放電話。** worker 版寫死 02-2833-5820，但 lib/site.ts 已經明訂
+ *    「聯絡方式一律走 LINE 官方帳號，站上不再放電話」。信裡放一支站上都不
+ *    公開的號碼，等於用交易信繞過那個決定。改走 layout() 既有的 LINE 出口。
+ * 2. 版型改用共用的 layout/infoCard，跟其他交易信長得一樣。
+ *
+ * ⚠️ 法規：不得有醫療宣稱（README §免責），文案只能寫「練習」「保健」。
+ */
+export function workshopReminderEmail(input: {
+  to: string;
+  name: string;
+  stage: "d3" | "d1";
+  title: string;
+  when: string;
+  location: string | null;
+  address: string | null;
+  orderNo: string;
+}): EmailMessage {
+  const subject =
+    input.stage === "d3"
+      ? `三天後見：${input.title}`
+      : `明天見：${input.title}`;
+  const opening =
+    input.stage === "d3"
+      ? "再過三天就要上課了，先把時間和地點提醒你一次。"
+      : "明天就是上課的日子了，這封信提醒你時間和地點。";
+
+  const rows: [string, string][] = [
+    ["課程", input.title],
+    ["時間", input.when],
+  ];
+  if (input.location) rows.push(["地點", input.location]);
+  if (input.address) rows.push(["地址", input.address]);
+  rows.push(["訂單編號", input.orderNo]);
+
+  const tips = [
+    "穿寬鬆一點的衣服，比較好活動。",
+    "提前十分鐘到，可以先坐下來喘口氣。",
+    "膝蓋或腰不舒服都沒關係，現場有替代姿勢，也有助教陪著。",
+  ];
+
+  const text = `${input.name} 你好，
+
+${opening}
+
+${rows.map(([k, v]) => `${k}：${v}`).join("\n")}
+
+小提醒
+${tips.map((t) => `・${t}`).join("\n")}
+
+臨時有狀況不能來，用 LINE 跟我們說一聲就好。
+
+課堂上見。${textFooter()}`;
+
+  const html = layout(`
+    ${paragraph(`${input.name} 你好，`)}
+    ${paragraph(opening)}
+    ${infoCard(rows)}
+    <p style="margin:0 0 8px;font-size:18px;line-height:1.6;font-weight:bold;color:${INK};">小提醒</p>
+    <ul style="margin:0 0 18px;padding-left:20px;font-size:17px;line-height:1.9;color:${INK};">
+      ${tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}
+    </ul>
+    ${paragraph("臨時有狀況不能來，用 LINE 跟我們說一聲就好。")}
+    ${paragraph("課堂上見。")}
+  `);
+
+  return { to: input.to, subject, text, html };
 }
 
 /* ---------------------------------------------------------------- 設定密碼 */

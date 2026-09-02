@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { flushOutbox } from "@/lib/email/outbox";
 import { flushInvoices } from "@/lib/invoice/issue";
 import { grantEntitlementsForOrder } from "@/lib/admin/entitlements";
+import { sendWorkshopReminders } from "@/lib/email/workshop-reminders";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +26,12 @@ export const maxDuration = 60;
  * 之後如果升級 Vercel Pro 或把 worker 部署到 Railway，這支可以直接退役。
  */
 
+/**
+ * 一次 flush 幾封。預設的 5 封是給 after() 那種「順手寄一下」用的，
+ * 每日排程要能一次把當天的提醒送完，所以放大。
+ */
+const REMINDER_FLUSH_BATCH = 100;
+
 /** Vercel Cron 會帶 Authorization: Bearer <CRON_SECRET>。 */
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -42,9 +49,26 @@ export async function GET(request: Request) {
   const started = Date.now();
   const result: Record<string, unknown> = {};
 
-  // 1) 把寄失敗的信重試一次
+  /*
+    0) 開課提醒（前 3 天／前 1 天）。
+
+    ⚠️ 排在 flushOutbox **之前**：這裡只把信排進 outbox，真正送出是下一步。
+       順序顛倒的話今天排的提醒要等明天才寄，前一天的提醒就變成當天早上才到。
+
+    這支的去重靠 email_outbox.dedupe_key 的 unique 約束，重跑安全。
+    ?dry=1 可以只看「會寄給誰」而不真的排進去（驗證用）。
+  */
+  const dryRun = new URL(request.url).searchParams.get("dry") === "1";
   try {
-    const flushed = await flushOutbox();
+    result.reminders = await sendWorkshopReminders({ dryRun });
+  } catch (error) {
+    console.error("[cron/daily] sendWorkshopReminders 失敗", error);
+    result.reminders = { error: (error as Error).message };
+  }
+
+  // 1) 把排進 outbox 的信送出去（含上一步的提醒，以及先前寄失敗的重試）
+  try {
+    const flushed = await flushOutbox(dryRun ? 0 : REMINDER_FLUSH_BATCH);
     result.email = flushed;
   } catch (error) {
     console.error("[cron/daily] flushOutbox 失敗", error);
