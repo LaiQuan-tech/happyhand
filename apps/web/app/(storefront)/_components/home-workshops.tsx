@@ -3,6 +3,9 @@ import type { WorkshopRow } from "@/lib/data";
 import { SessionRow } from "@/app/(storefront)/workshops/_components/session-row";
 import { NoSessions } from "@/app/(storefront)/workshops/_components/no-sessions";
 
+/** 首頁最多列幾場。超過的收進 /workshops，不要讓首頁變成場次表。 */
+const HOME_SESSION_LIMIT = 6;
+
 /**
  * 首頁的工作坊區塊。
  *
@@ -15,8 +18,8 @@ import { NoSessions } from "@/app/(storefront)/workshops/_components/no-sessions
  * 同一種東西在站上長得不一樣會讓人以為是兩件事，而且那個元件的
  * RWD 已經驗過（390px 無溢出、觸控區達標），另刻等於重新承擔一次風險。
  *
- * 只顯示最近兩場。首頁的任務是「讓人知道有實體課、下一場什麼時候」，
- * 不是把場次表搬過來。
+ * 只顯示最近幾場。首頁的任務是「讓人知道有實體課、下一場什麼時候」，
+ * 不是把場次表搬過來——超過的用底下那顆按鈕帶去 /workshops。
  */
 export function HomeWorkshops({
   sessions,
@@ -26,7 +29,7 @@ export function HomeWorkshops({
   /** 只有 type=workshop 的商品有單場詳情頁，其餘（例如讀脈入門課的實體班）標題不做連結 */
   workshopSlugs: Set<string>;
 }) {
-  const upcoming = sessions.slice(0, 2);
+  const upcoming = sessions.slice(0, HOME_SESSION_LIMIT);
   const more = sessions.length - upcoming.length;
 
   return (
@@ -63,7 +66,7 @@ export function HomeWorkshops({
           )}
         </div>
 
-        {/* 還有其他場次時才給出口。只有兩場的話這顆按鈕會把人帶到一模一樣的內容。 */}
+        {/* 還有其他場次時才給出口。全部都列完的話這顆按鈕會把人帶到一模一樣的內容。 */}
         {more > 0 && (
           <div className="mt-[20px] text-center md:mt-[28px]">
             <LinkButton href="/workshops" variant="outline">
