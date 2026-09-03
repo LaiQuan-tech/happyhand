@@ -34,6 +34,31 @@ AMEGO_PROXY_TOKEN = <同 PROXY_TOKEN>
 ⚠️ `AMEGO_API_URL` 沒改的話，`lib/invoice/amego.ts` 判定為直連，**不會**送
 token 標頭（避免把我們的 token 送給第三方），也就等於這支代理沒有生效。
 
+## 部署設定放在哪（不在這個 repo）
+
+⚠️ **這個目錄裡沒有 railway.json，是刻意的。** Railway 已經棄用 config-as-code
+（`railway.json` / `railway.toml`），API 直接回絕：
+
+```
+Config as Code (railway.json / railway.toml) is deprecated.
+Use Infrastructure as Code (.railway/railway.ts) instead.
+```
+
+所以設定是直接寫在 service 上（`serviceInstanceUpdate`），目前值：
+
+| 項目 | 值 |
+|---|---|
+| Railway 專案 | `happyhands-amego-proxy` |
+| service | `amego-proxy` |
+| region | `us-west2`（回報名稱 `sfo`） |
+| start command | `node apps/amego-proxy/src/server.js` |
+| healthcheck | `/healthz` |
+| watch patterns | `apps/amego-proxy/**`、`pnpm-lock.yaml`、`pnpm-workspace.yaml` |
+| 對外網址 | `https://amego-proxy-production.up.railway.app` |
+
+（repo 根目錄那份 `railway.json` 是給 `apps/worker` 的，同樣已失效——worker
+從未部署過。）
+
 ## ⚠️ 換 region 或重建 service，出口 IP 會變
 
 固定 IP 是綁在 service 的 egress gateway 上。重建、換區、或 Railway 調整
