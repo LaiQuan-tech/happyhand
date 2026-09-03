@@ -1,0 +1,11 @@
+{
+  "name": "amego-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Amego 發票 API 的固定出口 IP 代理（跑在 Railway，掛 Static Outbound IP）",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}

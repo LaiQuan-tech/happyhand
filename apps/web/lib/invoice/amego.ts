@@ -31,12 +31,22 @@ import { createHash } from "node:crypto";
  *    沒記到」，這正是 lib/invoice/issue.ts 的 claim 機制要接住的情況。
  */
 
-const BASE_URL = (process.env.AMEGO_API_URL ?? "https://invoice-api.amego.tw").replace(
-  /\/+$/,
-  "",
-);
+const AMEGO_OFFICIAL = "https://invoice-api.amego.tw";
+const BASE_URL = (process.env.AMEGO_API_URL ?? AMEGO_OFFICIAL).replace(/\/+$/, "");
 const TAX_ID = process.env.AMEGO_TAX_ID ?? "";
 const APP_KEY = process.env.AMEGO_APP_KEY ?? "";
+
+/**
+ * 走固定出口 IP 代理時的通行證（apps/amego-proxy，跑在 Railway）。
+ *
+ * Amego 用來源 IP 白名單，而 Vercel 的出口 IP 是浮動的，所以正式站是把
+ * AMEGO_API_URL 指到代理、由代理用固定 IP 打 Amego。
+ *
+ * ⚠️ 只在「確定不是直連 Amego」時才送這個標頭 —— 設錯 URL 的時候，我們的代理
+ *    token 不該被送到第三方去。
+ */
+const PROXY_TOKEN = process.env.AMEGO_PROXY_TOKEN ?? "";
+const VIA_PROXY = PROXY_TOKEN !== "" && BASE_URL !== AMEGO_OFFICIAL;
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
@@ -83,7 +93,10 @@ async function amegoPost(path: string, payload: unknown): Promise<
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...(VIA_PROXY ? { "x-proxy-token": PROXY_TOKEN } : {}),
+      },
       body: body.toString(),
       cache: "no-store",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

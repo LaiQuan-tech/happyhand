@@ -8,6 +8,8 @@ importers:
 
   .: {}
 
+  apps/amego-proxy: {}
+
   apps/web:
     dependencies:
       '@supabase/ssr':
